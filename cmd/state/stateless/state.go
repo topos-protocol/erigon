@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/csv"
 	"fmt"
 	"io/ioutil"
@@ -14,19 +13,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RoaringBitmap/roaring"
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon/common/dbutils"
-	"github.com/ledgerwatch/erigon/common/debug"
-	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
-	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
-	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/ethdb/cbor"
-	"github.com/ledgerwatch/erigon/ethdb/typedcursor"
-	"github.com/ledgerwatch/erigon/rlp"
 	"github.com/wcharczuk/go-chart"
 	"github.com/wcharczuk/go-chart/drawing"
 	"github.com/wcharczuk/go-chart/util"
@@ -84,14 +78,14 @@ func (tsi TimeSorterInt) Swap(i, j int) {
 type IntSorterAddr struct {
 	length int
 	ints   []int
-	values []common.Address
+	values []libcommon.Address
 }
 
 func NewIntSorterAddr(length int) IntSorterAddr {
 	return IntSorterAddr{
 		length: length,
 		ints:   make([]int, length),
-		values: make([]common.Address, length),
+		values: make([]libcommon.Address, length),
 	}
 }
 
@@ -108,7 +102,7 @@ func (isa IntSorterAddr) Swap(i, j int) {
 	isa.values[i], isa.values[j] = isa.values[j], isa.values[i]
 }
 
-func commit(k []byte, tx ethdb.RwTx, data interface{}) {
+func commit(k []byte, tx kv.RwTx, data interface{}) {
 	//defer func(t time.Time) { fmt.Println("Commit:", time.Since(t)) }(time.Now())
 	var buf bytes.Buffer
 
@@ -116,13 +110,25 @@ func commit(k []byte, tx ethdb.RwTx, data interface{}) {
 	defer cbor.Return(encoder)
 
 	encoder.MustEncode(data)
-	if err := tx.RwCursor(ReportsProgressBucket).Put(k, buf.Bytes()); err != nil {
+	cursor, err := tx.RwCursor(ReportsProgressBucket)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if err := cursor.Put(k, buf.Bytes()); err != nil {
 		panic(err)
 	}
 }
 
-func restore(k []byte, tx ethdb.Tx, data interface{}) {
-	_, v, err := tx.Cursor(ReportsProgressBucket).SeekExact(k)
+func restore(k []byte, tx kv.Tx, data interface{}) {
+	cursor, err := tx.Cursor(ReportsProgressBucket)
+
+	if err != nil {
+		panic(err)
+	}
+
+	_, v, err := cursor.SeekExact(k)
 	if err != nil {
 		panic(err)
 	}
@@ -132,384 +138,6 @@ func restore(k []byte, tx ethdb.Tx, data interface{}) {
 
 	decoder := cbor.Decoder(bytes.NewReader(v))
 	decoder.MustDecode(data)
-}
-
-type StateGrowth1Reporter struct {
-	StartedWhenBlockNumber uint64
-	MaxTimestamp           uint64
-	HistoryKey             []byte
-	AccountKey             []byte
-	// For each timestamp, how many accounts were created in the state
-	CreationsByBlock map[uint64]int
-	remoteDB         ethdb.KV `codec:"-"`
-}
-
-func NewStateGrowth1Reporter(ctx context.Context, remoteDB ethdb.KV, _ ethdb.KV) *StateGrowth1Reporter {
-
-	rep := &StateGrowth1Reporter{
-		remoteDB:         remoteDB,
-		HistoryKey:       []byte{},
-		AccountKey:       []byte{},
-		MaxTimestamp:     0,
-		CreationsByBlock: make(map[uint64]int),
-	}
-
-	return rep
-}
-
-func (r *StateGrowth1Reporter) interrupt(ctx context.Context, i int, startTime time.Time) (breakTx bool) {
-	if i%PrintProgressEvery == 0 {
-		fmt.Printf("Processed %dK, %s\n", i/1000, time.Since(startTime))
-	}
-	if i%PrintMemStatsEvery == 0 {
-		debug.PrintMemStats(true)
-	}
-	if i%MaxIterationsPerTx == 0 {
-		return true
-	}
-	return false
-}
-
-func (r *StateGrowth1Reporter) StateGrowth1(ctx context.Context) {
-	tx, err2 := r.remoteDB.Begin(ctx)
-	if err2 != nil {
-		panic(err2)
-	}
-	defer tx.Rollback()
-	startTime := time.Now()
-
-	var i int
-
-	// Go through the history of account first
-	if r.StartedWhenBlockNumber == 0 {
-		var err error
-		r.StartedWhenBlockNumber, err = stages.GetStageProgress(ethdb.NewObjectDatabase(r.remoteDB), stages.Execution)
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	var lastAddress []byte
-	_ = lastAddress
-	var lastTimestamp uint64
-	cs := tx.Cursor(dbutils.PlainStateBucket)
-	sk, _, serr := cs.First()
-	if serr != nil {
-		panic(serr)
-	}
-	c := tx.Cursor(dbutils.AccountsHistoryBucket)
-	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
-		if err != nil {
-			panic(err)
-		}
-		address := k[:common.AddressLength]
-		hi := roaring.New()
-		if _, err1 := hi.FromBuffer(v); err1 != nil {
-			panic(err1)
-		}
-		blockNums := hi.ToArray()
-		// TODO: there is no more index for creations
-		//if created[0] {
-		//	if bytes.Equal(address, lastAddress) {
-		//		r.CreationsByBlock[lastTimestamp]--
-		//	}
-		//}
-		//for i, timestamp := range blockNums {
-		//	if created[i] {
-		//		r.CreationsByBlock[timestamp]++
-		//		if i > 0 {
-		//			r.CreationsByBlock[blockNums[i-1]]--
-		//		}
-		//	}
-		//}
-		if binary.BigEndian.Uint64(k[common.AddressLength:]) == 0xffffffffffffffff {
-			for ; sk != nil && bytes.Compare(sk, address) < 0; sk, _, serr = cs.Next() {
-				if serr != nil {
-					panic(serr)
-				}
-			}
-			if !bytes.Equal(sk, address) {
-				r.CreationsByBlock[uint64(blockNums[len(blockNums)-1])]--
-			}
-		}
-		i++
-		if i%100000 == 0 {
-			fmt.Printf("Processed %d account history records\n", i)
-		}
-		lastAddress = address
-		lastTimestamp = uint64(blockNums[len(blockNums)-1])
-
-		if lastTimestamp+1 > r.MaxTimestamp {
-			r.MaxTimestamp = lastTimestamp + 1
-		}
-	}
-
-	fmt.Printf("Processing took %s\n", time.Since(startTime))
-	fmt.Printf("Account history records: %d\n", i)
-	fmt.Printf("Creating dataset...\n")
-	// Sort accounts by timestamp
-	tsi := NewTimeSorterInt(len(r.CreationsByBlock))
-	idx := 0
-	for timestamp, count := range r.CreationsByBlock {
-		tsi.timestamps[idx] = timestamp
-		tsi.values[idx] = count
-		idx++
-	}
-	sort.Sort(tsi)
-	fmt.Printf("Writing dataset...\n")
-	f, err := os.Create("accounts_growth.csv")
-	check(err)
-	defer f.Close()
-
-	w := bufio.NewWriter(f)
-	defer w.Flush()
-	cumulative := 0
-	for i := 0; i < tsi.length; i++ {
-		cumulative += tsi.values[i]
-		fmt.Fprintf(w, "%d, %d, %d\n", tsi.timestamps[i], tsi.values[i], cumulative)
-	}
-	_ = lastAddress
-	_ = lastTimestamp
-}
-
-type StateGrowth2Reporter struct {
-	StartedWhenBlockNumber uint64
-	MaxTimestamp           uint64
-	HistoryKey             []byte
-	StorageKey             []byte
-
-	CreationsByBlock map[uint64]int
-
-	remoteDB ethdb.KV `codec:"-"`
-}
-
-func NewStateGrowth2Reporter(ctx context.Context, remoteDB ethdb.KV, _ ethdb.KV) *StateGrowth2Reporter {
-	rep := &StateGrowth2Reporter{
-		remoteDB:         remoteDB,
-		HistoryKey:       []byte{},
-		StorageKey:       []byte{},
-		MaxTimestamp:     0,
-		CreationsByBlock: make(map[uint64]int),
-	}
-	return rep
-}
-
-func (r *StateGrowth2Reporter) interrupt(ctx context.Context, i int, startTime time.Time) (breakTx bool) {
-	if i%PrintProgressEvery == 0 {
-		fmt.Printf("Processed %dK, %s\n", i/1000, time.Since(startTime))
-	}
-	if i%PrintMemStatsEvery == 0 {
-		debug.PrintMemStats(true)
-	}
-	if i%MaxIterationsPerTx == 0 {
-		return true
-	}
-	return false
-}
-
-func (r *StateGrowth2Reporter) StateGrowth2(ctx context.Context) {
-	tx, err2 := r.remoteDB.Begin(context.Background())
-	if err2 != nil {
-		panic(err2)
-	}
-	defer tx.Rollback()
-	startTime := time.Now()
-
-	var i int
-	var lastAddress []byte
-	var lastLocation []byte
-	_ = lastAddress
-	_ = lastLocation
-	var lastTimestamp uint64
-	cs := tx.Cursor(dbutils.PlainStateBucket)
-	sk, _, serr := cs.First()
-	if serr != nil {
-		panic(serr)
-	}
-	c := tx.Cursor(dbutils.StorageHistoryBucket)
-	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
-		if err != nil {
-			panic(err)
-		}
-		address := k[:common.AddressLength]
-		location := k[common.AddressLength : common.AddressLength+common.HashLength]
-		hi := roaring.New()
-		if _, err1 := hi.FromBuffer(v); err1 != nil {
-			panic(err1)
-		}
-		blockNums := hi.ToArray()
-		// TODO: there is no more index for creations
-		//if created[0] {
-		//	if bytes.Equal(address, lastAddress) || bytes.Equal(location, lastLocation) {
-		//		r.CreationsByBlock[lastTimestamp]--
-		//	}
-		//}
-		//for i, timestamp := range blockNums {
-		//	if created[i] {
-		//		r.CreationsByBlock[timestamp]++
-		//		if i > 0 {
-		//			r.CreationsByBlock[blockNums[i-1]]--
-		//		}
-		//	}
-		//}
-		if binary.BigEndian.Uint64(k[common.AddressLength+common.HashLength:]) == 0xffffffffffffffff {
-			var aCmp, lCmp int
-			for ; sk != nil; sk, _, serr = cs.Next() {
-				if serr != nil {
-					panic(serr)
-				}
-				sAddress := sk[:common.AddressLength]
-				var sLocation []byte
-				if len(sk) >= common.AddressLength+common.IncarnationLength {
-					sLocation = sk[common.AddressLength+common.IncarnationLength:]
-				}
-				aCmp = bytes.Compare(sAddress, address)
-				lCmp = bytes.Compare(sLocation, location)
-				if aCmp > 0 || (aCmp == 0 && lCmp >= 0) {
-					break
-				}
-			}
-			if aCmp != 0 || lCmp != 0 {
-				r.CreationsByBlock[uint64(blockNums[len(blockNums)-1])]--
-			}
-		}
-		i++
-		if i%100000 == 0 {
-			fmt.Printf("Processed %d storage history records\n", i)
-		}
-		lastAddress = address
-		lastLocation = location
-		lastTimestamp = uint64(blockNums[len(blockNums)-1])
-		if lastTimestamp+1 > r.MaxTimestamp {
-			r.MaxTimestamp = lastTimestamp + 1
-		}
-	}
-
-	fmt.Printf("Processing took %s\n", time.Since(startTime))
-	fmt.Printf("Storage history records: %d\n", i)
-	fmt.Printf("Creating dataset...\n")
-
-	// Sort accounts by timestamp
-	tsi := NewTimeSorterInt(len(r.CreationsByBlock))
-	idx := 0
-	for timestamp, count := range r.CreationsByBlock {
-		tsi.timestamps[idx] = timestamp
-		tsi.values[idx] = count
-		idx++
-	}
-	sort.Sort(tsi)
-	fmt.Printf("Writing dataset...\n")
-	f, err := os.Create("storage_growth.csv")
-	check(err)
-	defer f.Close()
-	w := bufio.NewWriter(f)
-	defer w.Flush()
-	cumulative := 0
-	for i := 0; i < tsi.length; i++ {
-		cumulative += tsi.values[i]
-		fmt.Fprintf(w, "%d, %d, %d\n", tsi.timestamps[i], tsi.values[i], cumulative)
-	}
-
-	debug.PrintMemStats(true)
-	_ = lastAddress
-	_ = lastLocation
-}
-
-type GasLimitReporter struct {
-	remoteDB               ethdb.KV `codec:"-"`
-	StartedWhenBlockNumber uint64
-	HeaderPrefixKey1       []byte
-	HeaderPrefixKey2       []byte
-
-	// map[common.Hash]uint64 - key is addrHash + hash
-	mainHashes *typedcursor.Uint64 // For each address hash, when was it last accounted
-
-	commit   func(ctx context.Context)
-	rollback func(ctx context.Context)
-}
-
-func NewGasLimitReporter(ctx context.Context, remoteDB ethdb.KV, localDB ethdb.KV) *GasLimitReporter {
-	var ProgressKey = []byte("gas_limit")
-
-	var err error
-	var localTx ethdb.RwTx
-
-	if localTx, err = localDB.BeginRw(ctx); err != nil {
-		panic(err)
-	}
-
-	rep := &GasLimitReporter{
-		remoteDB:         remoteDB,
-		HeaderPrefixKey1: []byte{},
-		HeaderPrefixKey2: []byte{},
-		mainHashes:       typedcursor.NewUint64(localTx.RwCursor(MainHashesBucket)),
-	}
-	rep.commit = func(ctx context.Context) {
-		commit(ProgressKey, localTx, rep)
-		if err = localTx.Commit(ctx); err != nil {
-			panic(err)
-		}
-		if localTx, err = localDB.BeginRw(ctx); err != nil {
-			panic(err)
-		}
-
-		rep.mainHashes = typedcursor.NewUint64(localTx.RwCursor(MainHashesBucket))
-	}
-
-	rep.rollback = func(ctx context.Context) {
-		localTx.Rollback()
-	}
-
-	restore(ProgressKey, localTx, rep)
-	return rep
-}
-
-func (r *GasLimitReporter) interrupt(ctx context.Context, i int, startTime time.Time) (breakTx bool) {
-	if i%PrintProgressEvery == 0 {
-		fmt.Printf("Processed %dK, %s\n", i/1000, time.Since(startTime))
-	}
-	if i%PrintMemStatsEvery == 0 {
-		debug.PrintMemStats(true)
-	}
-	if i%CommitEvery == 0 {
-		r.commit(ctx)
-	}
-	if i%MaxIterationsPerTx == 0 {
-		return true
-	}
-	return false
-}
-func (r *GasLimitReporter) GasLimits(ctx context.Context) {
-	defer r.rollback(ctx)
-
-	f, ferr := os.Create("gas_limits.csv")
-	check(ferr)
-	defer f.Close()
-	w := bufio.NewWriter(f)
-	defer w.Flush()
-	//var blockNum uint64 = 5346726
-	var blockNum uint64 = 0
-
-	if err := r.remoteDB.View(ctx, func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.HeadersBucket)
-		if err := ethdb.ForEach(c, func(k, v []byte) (bool, error) {
-			header := new(types.Header)
-			if err := rlp.Decode(bytes.NewReader(v), header); err != nil {
-				return false, err
-			}
-			fmt.Fprintf(w, "%d, %d\n", header.Number.Uint64(), header.GasLimit)
-			blockNum++
-			return true, nil
-		}); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("Finish processing %d blocks\n", blockNum)
-	debug.PrintMemStats(true)
 }
 
 func parseFloat64(str string) float64 {
@@ -1064,38 +692,42 @@ func stateGrowthChart5() {
 
 func storageUsage() {
 	startTime := time.Now()
-	//db := ethdb.MustOpen("/home/akhounov/.ethereum/geth/chaindata")
-	db := ethdb.MustOpen("/Volumes/tb4/turbo-geth-10/geth/chaindata")
-	//db := ethdb.MustOpen("/Users/alexeyakhunov/Library/Ethereum/geth/chaindata")
+	//db := mdbx.MustOpen("/home/akhounov/.ethereum/geth/chaindata")
+	db := mdbx.MustOpen("/Volumes/tb4/turbo-geth-10/geth/chaindata")
+	//db := mdbx.MustOpen("/Users/alexeyakhunov/Library/Ethereum/geth/chaindata")
 	defer db.Close()
 	/*
 		creatorsFile, err := os.Open("creators.csv")
 		check(err)
 		defer creatorsFile.Close()
 		creatorsReader := csv.NewReader(bufio.NewReader(creatorsFile))
-		creators := make(map[common.Address]common.Address)
+		creators := make(map[libcommon.Address]libcommon.Address)
 		for records, _ := creatorsReader.Read(); records != nil; records, _ = creatorsReader.Read() {
-			creators[common.HexToAddress(records[0])] = common.HexToAddress(records[1])
+			creators[libcommon.HexToAddress(records[0])] = libcommon.HexToAddress(records[1])
 		}
 	*/
 	addrFile, openErr := os.Open("addresses.csv")
 	check(openErr)
 	defer addrFile.Close()
 	addrReader := csv.NewReader(bufio.NewReader(addrFile))
-	names := make(map[common.Address]string)
+	names := make(map[libcommon.Address]string)
 	for records, _ := addrReader.Read(); records != nil; records, _ = addrReader.Read() {
-		names[common.HexToAddress(records[0])] = records[1]
+		names[libcommon.HexToAddress(records[0])] = records[1]
 	}
 	// Go through the current state
-	var addr common.Address
-	itemsByAddress := make(map[common.Address]int)
-	deleted := make(map[common.Address]bool) // Deleted contracts
+	var addr libcommon.Address
+	itemsByAddress := make(map[libcommon.Address]int)
+	deleted := make(map[libcommon.Address]bool) // Deleted contracts
 	numDeleted := 0
-	//itemsByCreator := make(map[common.Address]int)
+	//itemsByCreator := make(map[libcommon.Address]int)
 	count := 0
 	var leafSize uint64
-	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.HashedStorageBucket)
+	if err := db.View(context.Background(), func(tx kv.Tx) error {
+		c, err := tx.Cursor(dbutils.HashedStorageBucket)
+		if err != nil {
+			return err
+		}
+
 		for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 			if err != nil {
 				return err
@@ -1181,33 +813,38 @@ func storageUsage() {
 
 func tokenUsage() {
 	startTime := time.Now()
-	//remoteDB := ethdb.MustOpen("/home/akhounov/.ethereum/geth/chaindata")
-	db := ethdb.MustOpen("/Volumes/tb4/turbo-geth/geth/chaindata")
-	//remoteDB := ethdb.MustOpen("/Users/alexeyakhunov/Library/Ethereum/geth/chaindata")
+	//remoteDB := mdbx.MustOpen("/home/akhounov/.ethereum/geth/chaindata")
+	db := mdbx.MustOpen("/Volumes/tb4/turbo-geth/geth/chaindata")
+	//remoteDB := mdbx.MustOpen("/Users/alexeyakhunov/Library/Ethereum/geth/chaindata")
 	defer db.Close()
 	tokensFile, errOpen := os.Open("tokens.csv")
 	check(errOpen)
 	defer tokensFile.Close()
 	tokensReader := csv.NewReader(bufio.NewReader(tokensFile))
-	tokens := make(map[common.Address]struct{})
+	tokens := make(map[libcommon.Address]struct{})
 	for records, _ := tokensReader.Read(); records != nil; records, _ = tokensReader.Read() {
-		tokens[common.HexToAddress(records[0])] = struct{}{}
+		tokens[libcommon.HexToAddress(records[0])] = struct{}{}
 	}
 	addrFile, errOpen := os.Open("addresses.csv")
 	check(errOpen)
 	defer addrFile.Close()
 	addrReader := csv.NewReader(bufio.NewReader(addrFile))
-	names := make(map[common.Address]string)
+	names := make(map[libcommon.Address]string)
 	for records, _ := addrReader.Read(); records != nil; records, _ = addrReader.Read() {
-		names[common.HexToAddress(records[0])] = records[1]
+		names[libcommon.HexToAddress(records[0])] = records[1]
 	}
 	// Go through the current state
-	var addr common.Address
-	itemsByAddress := make(map[common.Address]int)
-	//itemsByCreator := make(map[common.Address]int)
+	var addr libcommon.Address
+	itemsByAddress := make(map[libcommon.Address]int)
+	//itemsByCreator := make(map[libcommon.Address]int)
 	count := 0
-	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.HashedStorageBucket)
+	if err := db.View(context.Background(), func(tx kv.Tx) error {
+		c, err := tx.Cursor(dbutils.HashedStorageBucket)
+
+		if err != nil {
+			return err
+		}
+
 		for k, _, err := c.First(); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
@@ -1256,33 +893,38 @@ func tokenUsage() {
 
 func nonTokenUsage() {
 	startTime := time.Now()
-	//db := ethdb.MustOpen("/home/akhounov/.ethereum/geth/chaindata")
-	db := ethdb.MustOpen("/Volumes/tb4/turbo-geth/geth/chaindata")
-	//db := ethdb.MustOpen("/Users/alexeyakhunov/Library/Ethereum/geth/chaindata")
+	//db := mdbx.MustOpen("/home/akhounov/.ethereum/geth/chaindata")
+	db := mdbx.MustOpen("/Volumes/tb4/turbo-geth/geth/chaindata")
+	//db := mdbx.MustOpen("/Users/alexeyakhunov/Library/Ethereum/geth/chaindata")
 	defer db.Close()
 	tokensFile, errOpen := os.Open("tokens.csv")
 	check(errOpen)
 	defer tokensFile.Close()
 	tokensReader := csv.NewReader(bufio.NewReader(tokensFile))
-	tokens := make(map[common.Address]struct{})
+	tokens := make(map[libcommon.Address]struct{})
 	for records, _ := tokensReader.Read(); records != nil; records, _ = tokensReader.Read() {
-		tokens[common.HexToAddress(records[0])] = struct{}{}
+		tokens[libcommon.HexToAddress(records[0])] = struct{}{}
 	}
 	addrFile, errOpen := os.Open("addresses.csv")
 	check(errOpen)
 	defer addrFile.Close()
 	addrReader := csv.NewReader(bufio.NewReader(addrFile))
-	names := make(map[common.Address]string)
+	names := make(map[libcommon.Address]string)
 	for records, _ := addrReader.Read(); records != nil; records, _ = addrReader.Read() {
-		names[common.HexToAddress(records[0])] = records[1]
+		names[libcommon.HexToAddress(records[0])] = records[1]
 	}
 	// Go through the current state
-	var addr common.Address
-	itemsByAddress := make(map[common.Address]int)
-	//itemsByCreator := make(map[common.Address]int)
+	var addr libcommon.Address
+	itemsByAddress := make(map[libcommon.Address]int)
+	//itemsByCreator := make(map[libcommon.Address]int)
 	count := 0
-	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.HashedStorageBucket)
+	if err := db.View(context.Background(), func(tx kv.Tx) error {
+		c, err := tx.Cursor(dbutils.HashedStorageBucket)
+
+		if err != nil {
+			return err
+		}
+
 		for k, _, err := c.First(); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
@@ -1331,9 +973,9 @@ func nonTokenUsage() {
 
 func dustEOA() {
 	startTime := time.Now()
-	//db := ethdb.MustOpen("/home/akhounov/.ethereum/geth/chaindata")
-	db := ethdb.MustOpen("/Volumes/tb4/turbo-geth/geth/chaindata")
-	//db := ethdb.MustOpen("/Users/alexeyakhunov/Library/Ethereum/geth/chaindata")
+	//db := mdbx.MustOpen("/home/akhounov/.ethereum/geth/chaindata")
+	db := mdbx.MustOpen("/Volumes/tb4/turbo-geth/geth/chaindata")
+	//db := mdbx.MustOpen("/Users/alexeyakhunov/Library/Ethereum/geth/chaindata")
 	defer db.Close()
 	count := 0
 	eoas := 0
@@ -1341,8 +983,13 @@ func dustEOA() {
 	// Go through the current state
 	thresholdMap := make(map[uint64]int)
 	var a accounts.Account
-	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.HashedAccountsBucket)
+	if err := db.KV().View(context.Background(), func(tx kv.Tx) error {
+		c, err := tx.Cursor(dbutils.HashedAccountsBucket)
+
+		if err != nil {
+			return err
+		}
+
 		for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 			if err != nil {
 				return err
