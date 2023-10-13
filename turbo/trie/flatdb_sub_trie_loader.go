@@ -2,14 +2,15 @@ package trie
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"time"
 
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common/length"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/common"
-	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/ethdb"
@@ -19,7 +20,7 @@ import (
 )
 
 var (
-	trieFlatDbSubTrieLoaderTimer = metrics.NewRegisteredTimer("trie/subtrieloader/flatdb", nil)
+	trieFlatDbSubTrieLoaderTimer = metrics.NewHistTimer("trie_subtrieloader_flatdb")
 )
 
 type StreamReceiver interface {
@@ -35,7 +36,7 @@ type StreamReceiver interface {
 	) error
 
 	Result() SubTries
-	Root() common.Hash
+	Root() libcommon.Hash
 }
 
 type FlatDbSubTrieLoader struct {
@@ -47,8 +48,7 @@ type FlatDbSubTrieLoader struct {
 	fixedbytes         []int
 	masks              []byte
 	cutoffs            []int
-	tx                 ethdb.Tx
-	kv                 ethdb.KV
+	tx                 kv.Tx
 	nextAccountKey     [32]byte
 	k, v               []byte
 	ihK, ihV           []byte
@@ -104,7 +104,7 @@ func NewFlatDbSubTrieLoader() *FlatDbSubTrieLoader {
 }
 
 // Reset prepares the loader for reuse
-func (fstl *FlatDbSubTrieLoader) Reset(db ethdb.Database, rl RetainDecider, receiverDecider RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) error {
+func (fstl *FlatDbSubTrieLoader) Reset(db kv.RwTx, rl RetainDecider, receiverDecider RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) error {
 	fstl.defaultReceiver.Reset(receiverDecider, hc, trace)
 	fstl.hc = hc
 	fstl.receiver = fstl.defaultReceiver
@@ -129,11 +129,7 @@ func (fstl *FlatDbSubTrieLoader) Reset(db ethdb.Database, rl RetainDecider, rece
 	if hasTx, ok := db.(ethdb.HasTx); ok {
 		fstl.tx = hasTx.Tx()
 	} else {
-		if hasKV, ok := db.(ethdb.HasKV); ok {
-			fstl.kv = hasKV.KV()
-		} else {
-			return fmt.Errorf("database doest not implement KV: %T", db)
-		}
+		return fmt.Errorf("database doest not implement Tx: %T", db)
 	}
 	fixedbytes := make([]int, len(fixedbits))
 	masks := make([]byte, len(fixedbits))
@@ -155,7 +151,7 @@ func (fstl *FlatDbSubTrieLoader) SetStreamReceiver(receiver StreamReceiver) {
 
 // iteration moves through the database buckets and creates at most
 // one stream item, which is indicated by setting the field fstl.itemPresent to true
-func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first bool) error {
+func (fstl *FlatDbSubTrieLoader) iteration(c kv.Cursor, ih *IHCursor2, first bool) error {
 	var isIH, isIHSequence bool
 	var minKey []byte
 	var err error
@@ -202,9 +198,9 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 		}
 		if cmp < 0 {
 			// This happens after we have just incremented rangeIdx or on the very first iteration
-			if first && len(dbPrefix) > common.HashLength {
+			if first && len(dbPrefix) > length.Hash {
 				// Looking for storage sub-tree
-				copy(fstl.accAddrHashWithInc[:], dbPrefix[:common.HashLength+common.IncarnationLength])
+				copy(fstl.accAddrHashWithInc[:], dbPrefix[:length.Hash+common.IncarnationLength])
 			}
 
 			if fstl.ihK, fstl.ihV, isIHSequence, err = ih.Seek(dbPrefix); err != nil {
@@ -216,7 +212,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 				if fstl.k, fstl.v, err = c.Seek(dbPrefix); err != nil {
 					return err
 				}
-				if len(dbPrefix) <= common.HashLength && len(fstl.k) > common.HashLength {
+				if len(dbPrefix) <= length.Hash && len(fstl.k) > length.Hash {
 					// Advance past the storage to the first account
 					if nextAccount(fstl.k, fstl.nextAccountKey[:]) {
 						if fstl.k, fstl.v, err = c.Seek(fstl.nextAccountKey[:]); err != nil {
@@ -254,16 +250,16 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 			fixedbytes = fstl.fixedbytes[fstl.rangeIdx]
 			mask = fstl.masks[fstl.rangeIdx]
 			dbPrefix = fstl.dbPrefixes[fstl.rangeIdx]
-			if len(dbPrefix) > common.HashLength {
+			if len(dbPrefix) > length.Hash {
 				// Looking for storage sub-tree
-				copy(fstl.accAddrHashWithInc[:], dbPrefix[:common.HashLength+common.IncarnationLength])
+				copy(fstl.accAddrHashWithInc[:], dbPrefix[:length.Hash+common.IncarnationLength])
 			}
 			cutoff = fstl.cutoffs[fstl.rangeIdx]
 		}
 	}
 
 	if !isIH {
-		if len(fstl.k) > common.HashLength && !bytes.HasPrefix(fstl.k, fstl.accAddrHashWithInc[:]) {
+		if len(fstl.k) > length.Hash && !bytes.HasPrefix(fstl.k, fstl.accAddrHashWithInc[:]) {
 			if bytes.Compare(fstl.k, fstl.accAddrHashWithInc[:]) < 0 {
 				// Skip all the irrelevant storage in the middle
 				if fstl.k, fstl.v, err = c.Seek(fstl.accAddrHashWithInc[:]); err != nil {
@@ -281,7 +277,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 			return nil
 		}
 		fstl.itemPresent = true
-		if len(fstl.k) > common.HashLength {
+		if len(fstl.k) > length.Hash {
 			fstl.itemType = StorageStreamItem
 			fstl.accountKey = nil
 			fstl.storageKey = fstl.k // no reason to copy, because this "pointer and data" will valid until end of transaction
@@ -327,7 +323,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 	if fstl.trace {
 		fmt.Printf("fstl.ihK %x, fstl.accAddrHashWithInc %x\n", fstl.ihK, fstl.accAddrHashWithInc[:])
 	}
-	if len(fstl.ihK) > common.HashLength && !bytes.HasPrefix(fstl.ihK, fstl.accAddrHashWithInc[:]) {
+	if len(fstl.ihK) > length.Hash && !bytes.HasPrefix(fstl.ihK, fstl.accAddrHashWithInc[:]) {
 		if bytes.Compare(fstl.ihK, fstl.accAddrHashWithInc[:]) < 0 {
 			// Skip all the irrelevant storage in the middle
 			if fstl.ihK, fstl.ihV, _, err = ih.Seek(fstl.accAddrHashWithInc[:]); err != nil {
@@ -345,7 +341,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 		return nil
 	}
 	fstl.itemPresent = true
-	if len(fstl.ihK) > common.HashLength {
+	if len(fstl.ihK) > length.Hash {
 		fstl.itemType = SHashStreamItem
 		fstl.accountKey = nil
 		fstl.storageKey = fstl.ihK
@@ -360,7 +356,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 	}
 
 	// skip subtree
-	next, ok := dbutils.NextSubtree(fstl.ihK)
+	next, ok := kv.NextSubtree(fstl.ihK)
 	if !ok { // no siblings left
 		fstl.k, fstl.ihK, fstl.ihV = nil, nil, nil
 		return nil
@@ -379,7 +375,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 	if fstl.k, fstl.v, err = c.Seek(next); err != nil {
 		return err
 	}
-	if len(next) <= common.HashLength && len(fstl.k) > common.HashLength {
+	if len(next) <= length.Hash && len(fstl.k) > length.Hash {
 		// Advance past the storage to the first account
 		if nextAccount(fstl.k, fstl.nextAccountKey[:]) {
 			if fstl.k, fstl.v, err = c.Seek(fstl.nextAccountKey[:]); err != nil {
@@ -443,15 +439,15 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 	case AccountStreamItem:
 		dr.advanceKeysAccount(accountKey, true /* terminator */)
 		if dr.curr.Len() > 0 && !dr.wasIH {
-			dr.cutoffKeysStorage(2 * (common.HashLength + common.IncarnationLength))
+			dr.cutoffKeysStorage(2 * (length.Hash + common.IncarnationLength))
 			if dr.currStorage.Len() > 0 {
 				if err := dr.genStructStorage(); err != nil {
 					return err
 				}
 			}
 			if dr.currStorage.Len() > 0 {
-				if len(dr.groups) >= 2*common.HashLength {
-					dr.groups = dr.groups[:2*common.HashLength-1]
+				if len(dr.groups) >= 2*length.Hash {
+					dr.groups = dr.groups[:2*length.Hash-1]
 				}
 				for len(dr.groups) > 0 && dr.groups[len(dr.groups)-1] == 0 {
 					dr.groups = dr.groups[:len(dr.groups)-1]
@@ -474,15 +470,15 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 	case AHashStreamItem:
 		dr.advanceKeysAccount(accountKey, false /* terminator */)
 		if dr.curr.Len() > 0 && !dr.wasIH {
-			dr.cutoffKeysStorage(2 * (common.HashLength + common.IncarnationLength))
+			dr.cutoffKeysStorage(2 * (length.Hash + common.IncarnationLength))
 			if dr.currStorage.Len() > 0 {
 				if err := dr.genStructStorage(); err != nil {
 					return err
 				}
 			}
 			if dr.currStorage.Len() > 0 {
-				if len(dr.groups) >= 2*common.HashLength {
-					dr.groups = dr.groups[:2*common.HashLength-1]
+				if len(dr.groups) >= 2*length.Hash {
+					dr.groups = dr.groups[:2*length.Hash-1]
 				}
 				for len(dr.groups) > 0 && dr.groups[len(dr.groups)-1] == 0 {
 					dr.groups = dr.groups[:len(dr.groups)-1]
@@ -506,7 +502,7 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 		if dr.trace {
 			fmt.Printf("storage cuttoff %d\n", cutoff)
 		}
-		if cutoff >= 2*(common.HashLength+common.IncarnationLength) {
+		if cutoff >= 2*(length.Hash+common.IncarnationLength) {
 			dr.cutoffKeysStorage(cutoff)
 			if dr.currStorage.Len() > 0 {
 				if err := dr.genStructStorage(); err != nil {
@@ -527,20 +523,20 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 				dr.subTries.Hashes = append(dr.subTries.Hashes, dr.hb.rootHash())
 			} else {
 				dr.subTries.roots = append(dr.subTries.roots, nil)
-				dr.subTries.Hashes = append(dr.subTries.Hashes, common.Hash{})
+				dr.subTries.Hashes = append(dr.subTries.Hashes, libcommon.Hash{})
 			}
 		} else {
 			dr.cutoffKeysAccount(cutoff)
 			if dr.curr.Len() > 0 && !dr.wasIH {
-				dr.cutoffKeysStorage(2 * (common.HashLength + common.IncarnationLength))
+				dr.cutoffKeysStorage(2 * (length.Hash + common.IncarnationLength))
 				if dr.currStorage.Len() > 0 {
 					if err := dr.genStructStorage(); err != nil {
 						return err
 					}
 				}
 				if dr.currStorage.Len() > 0 {
-					if len(dr.groups) >= 2*common.HashLength {
-						dr.groups = dr.groups[:2*common.HashLength-1]
+					if len(dr.groups) >= 2*length.Hash {
+						dr.groups = dr.groups[:2*length.Hash-1]
 					}
 					for len(dr.groups) > 0 && dr.groups[len(dr.groups)-1] == 0 {
 						dr.groups = dr.groups[:len(dr.groups)-1]
@@ -590,20 +586,17 @@ func (dr *DefaultReceiver) Result() SubTries {
 }
 
 func (fstl *FlatDbSubTrieLoader) LoadSubTries() (SubTries, error) {
-	defer trieFlatDbSubTrieLoaderTimer.UpdateSince(time.Now())
+	defer trieFlatDbSubTrieLoaderTimer.UpdateDuration(time.Now())
 	if len(fstl.dbPrefixes) == 0 {
 		return SubTries{}, nil
 	}
-	if fstl.tx == nil {
-		var err error
-		fstl.tx, err = fstl.kv.Begin(context.Background())
-		if err != nil {
-			return SubTries{}, err
-		}
-		defer fstl.tx.Rollback()
-	}
 	tx := fstl.tx
-	c := tx.Cursor(dbutils.CurrentStateBucketOld2)
+	c, err := tx.Cursor(kv.CurrentState)
+
+	if err != nil {
+		return SubTries{}, err
+	}
+
 	var filter = func(k []byte) (bool, error) {
 
 		if fstl.rl.Retain(k) {
@@ -621,7 +614,14 @@ func (fstl *FlatDbSubTrieLoader) LoadSubTries() (SubTries, error) {
 
 		return true, nil
 	}
-	ih := NewIHCursor2(NewFilterCursor2(filter, tx.CursorDupSort(dbutils.IntermediateTrieHashBucketOld2)))
+
+	cursorDupSort, err := tx.CursorDupSort(kv.IntermediateTrieHash)
+
+	if err != nil {
+		return SubTries{}, err
+	}
+
+	ih := NewIHCursor2(NewFilterCursor2(filter, cursorDupSort))
 	if err := fstl.iteration(c, ih, true /* first */); err != nil {
 		return SubTries{}, err
 	}
@@ -662,22 +662,10 @@ func (fstl *FlatDbSubTrieLoader) logProgress() {
 	log.Info("Calculating Merkle root", "current key", k)
 }
 
-func makeCurrentKeyStr(k []byte) string {
-	var currentKeyStr string
-	if k == nil {
-		currentKeyStr = "final"
-	} else if len(k) < 4 {
-		currentKeyStr = fmt.Sprintf("%x", k)
-	} else {
-		currentKeyStr = fmt.Sprintf("%x...", k[:4])
-	}
-	return currentKeyStr
-}
-
-func (fstl *FlatDbSubTrieLoader) AttachRequestedCode(db ethdb.Getter, requests []*LoadRequestForCode) error {
+func (fstl *FlatDbSubTrieLoader) AttachRequestedCode(db kv.Getter, requests []*LoadRequestForCode) error {
 	for _, req := range requests {
 		codeHash := req.codeHash
-		code, err := db.Get(dbutils.CodeBucket, codeHash[:])
+		code, err := db.GetOne(kv.Code, codeHash[:])
 		if err != nil {
 			return err
 		}
@@ -715,7 +703,7 @@ func (dr *DefaultReceiver) advanceKeysStorage(k []byte, terminator bool) {
 	}
 }
 
-func (dr *DefaultReceiver) Root() common.Hash {
+func (dr *DefaultReceiver) Root() libcommon.Hash {
 	panic("don't use me")
 }
 
@@ -733,7 +721,7 @@ func (dr *DefaultReceiver) genStructStorage() error {
 	var err error
 	var data GenStructStepData
 	if dr.wasIHStorage {
-		dr.hashData.Hash = common.BytesToHash(dr.valueStorage.Bytes())
+		dr.hashData.Hash = libcommon.BytesToHash(dr.valueStorage.Bytes())
 		data = &dr.hashData
 	} else {
 		dr.leafData.Value = rlphacks.RlpSerializableBytes(dr.valueStorage.Bytes())
@@ -829,13 +817,13 @@ func (dr *DefaultReceiver) saveValueAccount(isIH bool, v *accounts.Account, h []
 
 // FilterCursor - call .filter() and if it returns false - skip element
 type FilterCursor2 struct {
-	c ethdb.Cursor
+	c kv.Cursor
 
 	k, kHex, v []byte
 	filter     func(k []byte) (bool, error)
 }
 
-func NewFilterCursor2(filter func(k []byte) (bool, error), c ethdb.Cursor) *FilterCursor2 {
+func NewFilterCursor2(filter func(k []byte) (bool, error), c kv.Cursor) *FilterCursor2 {
 	return &FilterCursor2{c: c, filter: filter}
 }
 
@@ -912,22 +900,6 @@ func (c *IHCursor2) Seek(seek []byte) ([]byte, []byte, bool, error) {
 	}
 
 	return k, v, isSequenceOld(seek, k), nil
-}
-
-func isSequenceOld(prev []byte, next []byte) bool {
-	isSequence := false
-	if bytes.HasPrefix(next, prev) {
-		tail := next[len(prev):] // if tail has only zeroes, then no state records can be between fstl.nextHex and fstl.ihK
-		isSequence = true
-		for _, n := range tail {
-			if n != 0 {
-				isSequence = false
-				break
-			}
-		}
-	}
-
-	return isSequence
 }
 
 func keyIsBeforeOrEqualDeprecated(k1, k2 []byte) (bool, []byte) {

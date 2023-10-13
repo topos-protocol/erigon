@@ -18,12 +18,12 @@ package state
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 
 	"github.com/holiman/uint256"
 
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
@@ -39,21 +39,21 @@ var (
 // It creates the initial state trie during the construction, and then updates it
 // during the execution of block(s)
 type Stateless struct {
-	t              *trie.Trie             // State trie
-	codeUpdates    map[common.Hash][]byte // Lookup index from code hashes to corresponding bytecode
-	blockNr        uint64                 // Current block number
-	storageUpdates map[common.Hash]map[common.Hash][]byte
-	accountUpdates map[common.Hash]*accounts.Account
-	deleted        map[common.Hash]struct{}
-	created        map[common.Hash]struct{}
+	t              *trie.Trie                // State trie
+	codeUpdates    map[libcommon.Hash][]byte // Lookup index from code hashes to corresponding bytecode
+	blockNr        uint64                    // Current block number
+	storageUpdates map[libcommon.Hash]map[libcommon.Hash][]byte
+	accountUpdates map[libcommon.Hash]*accounts.Account
+	deleted        map[libcommon.Hash]struct{}
+	created        map[libcommon.Hash]struct{}
 	trace          bool
 }
 
 // NewStateless creates a new instance of Stateless
 // It deserialises the block witness and creates the state trie out of it, checking that the root of the constructed
 // state trie matches the value of `stateRoot` parameter
-func NewStateless(stateRoot common.Hash, blockWitness *trie.Witness, blockNr uint64, trace bool, isBinary bool) (*Stateless, error) {
-	t, err := trie.BuildTrieFromWitness(blockWitness, isBinary, trace)
+func NewStateless(stateRoot libcommon.Hash, blockWitness *trie.Witness, blockNr uint64, trace bool, isBinary bool) (*Stateless, error) {
+	t, err := trie.BuildTrieFromWitness(blockWitness, trace)
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +71,11 @@ func NewStateless(stateRoot common.Hash, blockWitness *trie.Witness, blockNr uin
 	}
 	return &Stateless{
 		t:              t,
-		codeUpdates:    make(map[common.Hash][]byte),
-		storageUpdates: make(map[common.Hash]map[common.Hash][]byte),
-		accountUpdates: make(map[common.Hash]*accounts.Account),
-		deleted:        make(map[common.Hash]struct{}),
-		created:        make(map[common.Hash]struct{}),
+		codeUpdates:    make(map[libcommon.Hash][]byte),
+		storageUpdates: make(map[libcommon.Hash]map[libcommon.Hash][]byte),
+		accountUpdates: make(map[libcommon.Hash]*accounts.Account),
+		deleted:        make(map[libcommon.Hash]struct{}),
+		created:        make(map[libcommon.Hash]struct{}),
 		blockNr:        blockNr,
 		trace:          trace,
 	}, nil
@@ -88,7 +88,7 @@ func (s *Stateless) SetBlockNr(blockNr uint64) {
 
 // ReadAccountData is a part of the StateReader interface
 // This implementation attempts to look up account data in the state trie, and fails if it is not found
-func (s *Stateless) ReadAccountData(address common.Address) (*accounts.Account, error) {
+func (s *Stateless) ReadAccountData(address libcommon.Address) (*accounts.Account, error) {
 	addrHash, err := common.HashData(address[:])
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (s *Stateless) ReadAccountData(address common.Address) (*accounts.Account, 
 
 // ReadAccountStorage is a part of the StateReader interface
 // This implementation attempts to look up the storage in the state trie, and fails if it is not found
-func (s *Stateless) ReadAccountStorage(address common.Address, incarnation uint64, key *common.Hash) ([]byte, error) {
+func (s *Stateless) ReadAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash) ([]byte, error) {
 	seckey, err := common.HashData(key[:])
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (s *Stateless) ReadAccountStorage(address common.Address, incarnation uint6
 }
 
 // ReadAccountCode is a part of the StateReader interface
-func (s *Stateless) ReadAccountCode(address common.Address, incarnation uint64, codeHash common.Hash) (code []byte, err error) {
+func (s *Stateless) ReadAccountCode(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) (code []byte, err error) {
 	if bytes.Equal(codeHash[:], emptyCodeHash) {
 		return nil, nil
 	}
@@ -146,7 +146,7 @@ func (s *Stateless) ReadAccountCode(address common.Address, incarnation uint64, 
 // ReadAccountCodeSize is a part of the StateReader interface
 // This implementation looks the code up in the codeMap, and returns its size
 // It fails if the code is not found in the map
-func (s *Stateless) ReadAccountCodeSize(address common.Address, incarnation uint64, codeHash common.Hash) (codeSize int, err error) {
+func (s *Stateless) ReadAccountCodeSize(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash) (codeSize int, err error) {
 	if bytes.Equal(codeHash[:], emptyCodeHash) {
 		return 0, nil
 	}
@@ -171,13 +171,13 @@ func (s *Stateless) ReadAccountCodeSize(address common.Address, incarnation uint
 	return 0, fmt.Errorf("could not find bytecode for hash %x", codeHash)
 }
 
-func (s *Stateless) ReadAccountIncarnation(address common.Address) (uint64, error) {
+func (s *Stateless) ReadAccountIncarnation(address libcommon.Address) (uint64, error) {
 	return 0, nil
 }
 
 // UpdateAccountData is a part of the StateWriter interface
 // This implementation registers the account update in the `accountUpdates` map
-func (s *Stateless) UpdateAccountData(_ context.Context, address common.Address, original, account *accounts.Account) error {
+func (s *Stateless) UpdateAccountData(address libcommon.Address, original, account *accounts.Account) error {
 	addrHash, err := common.HashData(address[:])
 	if err != nil {
 		return err
@@ -191,7 +191,7 @@ func (s *Stateless) UpdateAccountData(_ context.Context, address common.Address,
 
 // DeleteAccount is a part of the StateWriter interface
 // This implementation registers the deletion of the account in two internal maps
-func (s *Stateless) DeleteAccount(_ context.Context, address common.Address, original *accounts.Account) error {
+func (s *Stateless) DeleteAccount(address libcommon.Address, original *accounts.Account) error {
 	addrHash, err := common.HashData(address[:])
 	if err != nil {
 		return err
@@ -206,7 +206,7 @@ func (s *Stateless) DeleteAccount(_ context.Context, address common.Address, ori
 
 // UpdateAccountCode is a part of the StateWriter interface
 // This implementation adds the code to the codeMap to make it available for further accesses
-func (s *Stateless) UpdateAccountCode(address common.Address, incarnation uint64, codeHash common.Hash, code []byte) error {
+func (s *Stateless) UpdateAccountCode(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash, code []byte) error {
 	s.codeUpdates[codeHash] = code
 
 	if s.trace {
@@ -217,7 +217,7 @@ func (s *Stateless) UpdateAccountCode(address common.Address, incarnation uint64
 
 // WriteAccountStorage is a part of the StateWriter interface
 // This implementation registeres the change of the account's storage in the internal double map `storageUpdates`
-func (s *Stateless) WriteAccountStorage(_ context.Context, address common.Address, incarnation uint64, key *common.Hash, original, value *uint256.Int) error {
+func (s *Stateless) WriteAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash, original, value *uint256.Int) error {
 	addrHash, err := common.HashData(address[:])
 	if err != nil {
 		return err
@@ -226,7 +226,7 @@ func (s *Stateless) WriteAccountStorage(_ context.Context, address common.Addres
 	v := value.Bytes()
 	m, ok := s.storageUpdates[addrHash]
 	if !ok {
-		m = make(map[common.Hash][]byte)
+		m = make(map[libcommon.Hash][]byte)
 		s.storageUpdates[addrHash] = m
 	}
 	seckey, err := common.HashData(key[:])
@@ -246,7 +246,7 @@ func (s *Stateless) WriteAccountStorage(_ context.Context, address common.Addres
 
 // CreateContract is a part of StateWriter interface
 // This implementation registers given address in the internal map `created`
-func (s *Stateless) CreateContract(address common.Address) error {
+func (s *Stateless) CreateContract(address libcommon.Address) error {
 	addrHash, err := common.HashData(address[:])
 	if err != nil {
 		return err
@@ -259,9 +259,9 @@ func (s *Stateless) CreateContract(address common.Address) error {
 }
 
 // CheckRoot finalises the execution of a block and computes the resulting state root
-func (s *Stateless) CheckRoot(expected common.Hash) error {
+func (s *Stateless) CheckRoot(expected libcommon.Hash) error {
 	// The following map is to prevent repeated clearouts of the storage
-	alreadyCreated := make(map[common.Hash]struct{})
+	alreadyCreated := make(map[libcommon.Hash]struct{})
 	// New contracts are being created at these addresses. Therefore, we need to clear the storage items
 	// that might be remaining in the trie and figure out the next incarnations
 	for addrHash := range s.created {
@@ -335,10 +335,10 @@ func (s *Stateless) CheckRoot(expected common.Hash) error {
 		}
 		return fmt.Errorf("final root: %x, expected: %x", myRoot, expected)
 	}
-	s.storageUpdates = make(map[common.Hash]map[common.Hash][]byte)
-	s.accountUpdates = make(map[common.Hash]*accounts.Account)
-	s.deleted = make(map[common.Hash]struct{})
-	s.created = make(map[common.Hash]struct{})
+	s.storageUpdates = make(map[libcommon.Hash]map[libcommon.Hash][]byte)
+	s.accountUpdates = make(map[libcommon.Hash]*accounts.Account)
+	s.deleted = make(map[libcommon.Hash]struct{})
+	s.created = make(map[libcommon.Hash]struct{})
 	return nil
 }
 

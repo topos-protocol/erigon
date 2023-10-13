@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	trieWitnessDbSubTrieLoaderTimer = metrics.NewRegisteredTimer("trie/subtrieloader/witnessdb", nil)
+	trieWitnessDbSubTrieLoaderTimer = metrics.NewHistTimer("trie_subtrieloader_witnessdb")
 )
 
 type WitnessDbSubTrieLoader struct {
@@ -20,7 +20,7 @@ func NewWitnessDbSubTrieLoader() *WitnessDbSubTrieLoader {
 }
 
 func (wstl *WitnessDbSubTrieLoader) LoadSubTries(db WitnessStorage, blockNr uint64, trieLimit uint32, startPos int64, count int) (SubTries, int64, error) {
-	defer trieWitnessDbSubTrieLoaderTimer.UpdateSince(time.Now())
+	defer trieWitnessDbSubTrieLoaderTimer.UpdateDuration(time.Now())
 
 	serializedWitness, err := db.GetWitnessesForBlock(blockNr, trieLimit)
 	if err != nil {
@@ -36,7 +36,7 @@ func (wstl *WitnessDbSubTrieLoader) LoadSubTries(db WitnessStorage, blockNr uint
 		if err != nil {
 			return SubTries{}, 0, err
 		}
-		trie, err := BuildTrieFromWitness(witness, false /*is-binary*/, false /*trace*/)
+		trie, err := BuildTrieFromWitness(witness, false /*trace*/)
 		if err != nil {
 			return SubTries{}, 0, err
 		}

@@ -51,6 +51,8 @@ type Trie struct {
 	valueNodesRLPEncoded bool
 
 	newHasherFunc func() *hasher
+
+	observers *ObserverMux
 }
 
 // New creates a trie with an existing root node from db.
@@ -82,6 +84,10 @@ func NewTestRLPTrie(root libcommon.Hash) *Trie {
 		trie.root = hashNode{hash: root[:]}
 	}
 	return trie
+}
+
+func (t *Trie) AddObserver(observer Observer) {
+	t.observers.AddChild(observer)
 }
 
 // Get returns the value for key stored in the trie.

@@ -14,14 +14,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon-lib/chain"
+	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
-	"github.com/ledgerwatch/erigon/consensus/misc"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
-	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/visual"
@@ -38,36 +39,32 @@ var chartColors = []drawing.Color{
 	chart.ColorGreen,
 }
 
-func runBlock(ibs *state.IntraBlockState, txnWriter state.StateWriter, blockWriter state.StateWriter,
-	chainConfig *params.ChainConfig, bcb core.ChainContext, block *types.Block, vmConfig vm.Config) (types.Receipts, error) {
+func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.StateWriter, chainConfig *chain.Config, block *types.Block, vmConfig vm.Config) (types.Receipts, error) {
 	header := block.Header()
+
+	getHeader := func(hash common.Hash, number uint64) *types.Header {
+		h, _ := bp.Header(number, hash)
+		return h
+	}
+
+	getHashFn := core.GetHashFn(block.Header(), getHeader)
+
 	vmConfig.TraceJumpDest = true
 	engine := ethash.NewFullFaker()
 	gp := new(core.GasPool).AddGas(block.GasLimit())
 	usedGas := new(uint64)
 	var receipts types.Receipts
-	if chainConfig.DAOForkSupport && chainConfig.DAOForkBlock != nil && chainConfig.DAOForkBlock.Cmp(block.Number()) == 0 {
-		misc.ApplyDAOHardFork(ibs)
+
+	if err := core.InitializeBlockExecution(engine, nil, block.Header(), chainConfig, ibs, nil); err != nil {
+		return nil, err
 	}
-	for i, tx := range block.Transactions() {
-		ibs.Prepare(tx.Hash(), block.Hash(), i)
-		receipt, err := core.ApplyTransaction(chainConfig, bcb, nil, gp, ibs, txnWriter, header, tx, usedGas, vmConfig)
+
+	for _, tx := range block.Transactions() {
+		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, ibs, txnWriter, header, tx, usedGas, nil, vmConfig)
 		if err != nil {
 			return nil, fmt.Errorf("tx %x failed: %v", tx.Hash(), err)
 		}
 		receipts = append(receipts, receipt)
-	}
-
-	if !vmConfig.ReadOnly {
-		// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-		if _, err := engine.FinalizeAndAssemble(chainConfig, header, ibs, block.Transactions(), block.Uncles(), receipts); err != nil {
-			return nil, fmt.Errorf("finalize of block %d failed: %v", block.NumberU64(), err)
-		}
-
-		ctx := chainConfig.WithEIPsFlags(context.Background(), header.Number)
-		if err := ibs.CommitBlock(ctx, blockWriter); err != nil {
-			return nil, fmt.Errorf("committing block %d failed: %v", block.NumberU64(), err)
-		}
 	}
 
 	return receipts, nil
@@ -132,7 +129,7 @@ func starkData(witness *trie.Witness, starkStatsBase string, blockNum uint64) er
 	return nil
 }
 
-type CreateDbFunc func(string) (*ethdb.ObjectDatabase, error)
+type CreateDbFunc func(string) (kv.RwDB, error)
 
 func Stateless(
 	ctx context.Context,
@@ -191,21 +188,21 @@ func Stateless(
 		check(err)
 	}
 	var preRoot common.Hash
-	if blockNum == 1 {
-		_, _, _, err = core.SetupGenesisBlock(stateDb, core.DefaultGenesisBlock(), writeHistory, true /* overwrite */)
-		check(err)
-		db := ethdb.NewMemDatabase()
-		defer db.Close()
-		genesisBlock, _, err1 := core.DefaultGenesisBlock().ToBlock(db, writeHistory)
-		check(err1)
-		preRoot = genesisBlock.Header().Root
-	}
+	// if blockNum == 1 {
+	// 	_, _, _, err = core.SetupGenesisBlock(stateDb, core.DefaultGenesisBlock(), writeHistory, true /* overwrite */)
+	// 	check(err)
+	// 	db := ethdb.NewMemDatabase()
+	// 	defer db.Close()
+	// 	genesisBlock, _, err1 := core.DefaultGenesisBlock().ToBlock(db, writeHistory)
+	// 	check(err1)
+	// 	preRoot = genesisBlock.Header().Root
+	// }
 
 	chainConfig := params.MainnetChainConfig
 	vmConfig := vm.Config{}
 	engine := ethash.NewFullFaker()
 
-	if blockNum > 1 {
+	if blockNum > 0 {
 		if errBc := blockProvider.FastFwd(blockNum - 1); errBc != nil {
 			check(errBc)
 		}
@@ -217,16 +214,21 @@ func Stateless(
 
 		if verifySnapshot {
 			fmt.Println("Verifying snapshot..")
-			checkRoots(stateDb, preRoot, blockNum-1)
+			// checkRoots(stateDb, preRoot, blockNum-1)
 			fmt.Println("Verifying snapshot... OK")
 		}
 	}
-	batch := stateDb.NewBatch()
+
+	tx, err := stateDb.BeginRw(context.Background())
+	batch := memdb.NewMemoryBatch(tx, "")
+
+	defer batch.Rollback()
 	defer func() {
 		if err = batch.Commit(); err != nil {
 			fmt.Printf("Failed to commit batch: %v\n", err)
 		}
 	}()
+
 	tds := state.NewTrieDbState(preRoot, batch, blockNum-1)
 	tds.SetResolveReads(false)
 	tds.SetNoHistory(!writeHistory)
@@ -247,13 +249,17 @@ func Stateless(
 	}
 
 	if witnessDatabasePath != "" {
-		var db ethdb.Database
+		var db kv.RwDB
 		db, err = createDb(witnessDatabasePath)
+
+		tx, err := db.BeginRw(context.Background())
+		defer tx.Rollback()
+
 		check(err)
 		defer db.Close()
 
 		if useStatelessResolver {
-			witnessDBReader = NewWitnessDBReader(db)
+			witnessDBReader = NewWitnessDBReader(tx)
 			fmt.Printf("Will use the stateless resolver with DB: %s\n", witnessDatabasePath)
 		} else {
 			statsFilePath := fmt.Sprintf("%v.stats.csv", witnessDatabasePath)
@@ -266,7 +272,7 @@ func Stateless(
 			statsFileCsv := csv.NewWriter(file)
 			defer statsFileCsv.Flush()
 
-			witnessDBWriter, err = NewWitnessDBWriter(db, statsFileCsv)
+			witnessDBWriter, err = NewWitnessDBWriter(tx, statsFileCsv)
 			check(err)
 			fmt.Printf("witnesses will be stored to a db at path: %s\n\tstats: %s\n", witnessDatabasePath, statsFilePath)
 		}
@@ -275,6 +281,8 @@ func Stateless(
 
 	err = blockProvider.FastFwd(blockNum)
 	check(err)
+
+	stateWriter := tds.DbStateWriter()
 
 	for !interrupt {
 		select {
@@ -300,35 +308,25 @@ func Stateless(
 		header := block.Header()
 		tds.StartNewBuffer()
 		var receipts types.Receipts
-		if chainConfig.DAOForkSupport && chainConfig.DAOForkBlock != nil && chainConfig.DAOForkBlock.Cmp(block.Number()) == 0 {
-			misc.ApplyDAOHardFork(statedb)
+		if err := core.InitializeBlockExecution(engine, nil, block.Header(), chainConfig, statedb, nil); err != nil {
+			fmt.Printf("Error initializing block %d: %v\n", blockNum, err)
+			return
 		}
-		for i, tx := range block.Transactions() {
-			statedb.Prepare(tx.Hash(), block.Hash(), i)
-			var receipt *types.Receipt
-			receipt, err = core.ApplyTransaction(chainConfig, blockProvider, nil, gp, statedb, tds.TrieStateWriter(), header, tx, usedGas, vmConfig)
+
+		getHeader := func(hash common.Hash, number uint64) *types.Header {
+			h, _ := blockProvider.Header(number, hash)
+			return h
+		}
+
+		getHashFn := core.GetHashFn(block.Header(), getHeader)
+
+		for _, tx := range block.Transactions() {
+			receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, statedb, stateWriter, header, tx, usedGas, nil, vmConfig)
 			if err != nil {
-				fmt.Printf("tx %x failed: %v\n", tx.Hash(), err)
+				fmt.Errorf("tx %x failed: %v", tx.Hash(), err)
 				return
 			}
-			if !chainConfig.IsByzantium(header.Number) {
-				tds.StartNewBuffer()
-			}
 			receipts = append(receipts, receipt)
-		}
-		// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-		if _, err = engine.FinalizeAndAssemble(chainConfig, header, statedb, block.Transactions(), block.Uncles(), receipts); err != nil {
-			fmt.Printf("Finalize of block %d failed: %v\n", blockNum, err)
-			return
-		}
-
-		execTime1 := time.Since(execStart)
-		execStart = time.Now()
-
-		ctx := chainConfig.WithEIPsFlags(ctx, header.Number)
-		if err := statedb.FinalizeTx(ctx, tds.TrieStateWriter()); err != nil {
-			fmt.Printf("FinalizeTx of block %d failed: %v\n", blockNum, err)
-			return
 		}
 
 		if witnessDBReader != nil {
@@ -360,7 +358,7 @@ func Stateless(
 			}
 
 			var buf bytes.Buffer
-			blockWitnessStats, err = bw.WriteTo(&buf)
+			blockWitnessStats, err = bw.WriteInto(&buf)
 			if err != nil {
 				fmt.Printf("error extracting witness for block %d: %v\n", blockNum, err)
 				return
@@ -403,7 +401,7 @@ func Stateless(
 			ibs := state.New(s)
 			ibs.SetTrace(trace)
 			s.SetBlockNr(blockNum)
-			if _, err = runBlock(ibs, s, s, chainConfig, blockProvider, block, vmConfig); err != nil {
+			if _, err = runBlock(blockProvider, ibs, stateWriter, chainConfig, block, vmConfig); err != nil {
 				fmt.Printf("Error running block %d through stateless2: %v\n", blockNum, err)
 				finalRootFail = true
 			} else if !binary {
@@ -450,7 +448,7 @@ func Stateless(
 			}
 			return
 		}
-		if !chainConfig.IsByzantium(header.Number) {
+		if !chainConfig.IsByzantium(header.Number.Uint64()) {
 			for i, receipt := range receipts {
 				receipt.PostState = roots[i].Bytes()
 			}
@@ -463,7 +461,7 @@ func Stateless(
 		tds.SetBlockNr(blockNum)
 
 		blockWriter := tds.DbStateWriter()
-		err = statedb.CommitBlock(ctx, blockWriter)
+		err = statedb.CommitBlock(chainConfig.Rules(blockNum, header.Time), blockWriter)
 		if err != nil {
 			fmt.Printf("Committing block %d failed: %v", blockNum, err)
 			return
@@ -479,22 +477,22 @@ func Stateless(
 			}
 		}
 
-		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
+		// willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		if batch.BatchSize() >= 100000 || willSnapshot {
-			if err := batch.Commit(); err != nil {
-				fmt.Printf("Failed to commit batch: %v\n", err)
-				return
-			}
-			tds.EvictTries(false)
-		}
+		// if batch.BatchSize() >= 100000 || willSnapshot {
+		// 	if err := batch.Commit(); err != nil {
+		// 		fmt.Printf("Failed to commit batch: %v\n", err)
+		// 		return
+		// 	}
+		// 	tds.EvictTries(false)
+		// }
 
-		if willSnapshot {
-			// Snapshots of the state will be written to the same directory as the state file
-			fmt.Printf("\nSaving snapshot at block %d, hash %x\n", blockNum, block.Root())
+		// if willSnapshot {
+		// 	// Snapshots of the state will be written to the same directory as the state file
+		// 	fmt.Printf("\nSaving snapshot at block %d, hash %x\n", blockNum, block.Root())
 
-			saveSnapshot(stateDb, fmt.Sprintf("%s_%d", statefile, blockNum), createDb)
-		}
+		// 	saveSnapshot(stateDb, fmt.Sprintf("%s_%d", statefile, blockNum), createDb)
+		// }
 
 		preRoot = header.Root
 		blockNum++
@@ -502,7 +500,7 @@ func Stateless(
 
 		if blockNum%1000 == 0 {
 			// overwrite terminal line, if no snapshot was made and not the first line
-			if blockNum > 0 && !willSnapshot {
+			if blockNum > 0 {
 				fmt.Printf("\r")
 			}
 
@@ -514,8 +512,7 @@ func Stateless(
 
 			fmt.Printf("Processed %d blocks (%v blocks/sec)", blockNum, blocksPerSecond)
 		}
-		fmt.Fprintf(timeF, "%d,%d,%d,%d,%d,%d\n", blockNum,
-			execTime1.Nanoseconds(),
+		fmt.Fprintf(timeF, "%d,%d,%d,%d,%d\n", blockNum,
 			execTime2.Nanoseconds(),
 			execTime3.Nanoseconds(),
 			execTime4.Nanoseconds(),

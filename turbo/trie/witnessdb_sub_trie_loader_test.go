@@ -49,7 +49,7 @@ func TestRebuildTrie(t *testing.T) {
 	}
 
 	var buff bytes.Buffer
-	_, err = w1.WriteTo(&buff)
+	_, err = w1.WriteInto(&buff)
 	if err != nil {
 		t.Error(err)
 	}
@@ -59,7 +59,7 @@ func TestRebuildTrie(t *testing.T) {
 		t.Error(err)
 	}
 
-	_, err = w2.WriteTo(&buff)
+	_, err = w2.WriteInto(&buff)
 	if err != nil {
 		t.Error(err)
 	}
@@ -69,7 +69,7 @@ func TestRebuildTrie(t *testing.T) {
 		t.Error(err)
 	}
 
-	_, err = w3.WriteTo(&buff)
+	_, err = w3.WriteInto(&buff)
 	if err != nil {
 		t.Error(err)
 	}

@@ -118,6 +118,7 @@ const (
 	//value - storage value(common.hash)
 	HashedAccounts = "HashedAccount"
 	HashedStorage  = "HashedStorage"
+	CurrentState   = "CurrentState"
 )
 
 /*
@@ -231,6 +232,7 @@ Invariants:
 */
 const TrieOfAccounts = "TrieAccount"
 const TrieOfStorage = "TrieStorage"
+const IntermediateTrieHash = "IntermediateTrieHash"
 
 // Mapping [block number] => [Verkle Root]
 const VerkleRoots = "VerkleRoots"
@@ -304,6 +306,8 @@ const (
 	TxLookup = "BlockTransactionLookup" // hash -> transaction/receipt lookup metadata
 
 	ConfigTable = "Config" // config prefix for the db
+
+	PreimagePrefix = "SecureKey" // preimagePrefix + hash -> preimage
 
 	// Progress of sync stages: stageName -> stageData
 	SyncStageProgress = "SyncStage"

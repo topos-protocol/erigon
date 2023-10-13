@@ -2,6 +2,7 @@ package trie
 
 import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 )
 
 var emptyHash [32]byte
@@ -21,17 +22,20 @@ type LoadFunc func(*SubTrieLoader, *RetainList, [][]byte, []int) (SubTries, erro
 // One resolver per trie (prefix).
 // See also ResolveRequest in trie.go
 type SubTrieLoader struct {
+	blockNr      uint64
 	codeRequests []*LoadRequestForCode
 }
 
-func NewSubTrieLoader() *SubTrieLoader {
+func NewSubTrieLoader(blockNr uint64) *SubTrieLoader {
 	tr := SubTrieLoader{
 		codeRequests: []*LoadRequestForCode{},
+		blockNr:      blockNr,
 	}
 	return &tr
 }
 
-func (stl *SubTrieLoader) Reset() {
+func (stl *SubTrieLoader) Reset(blockNr uint64) {
+	stl.blockNr = blockNr
 	stl.codeRequests = stl.codeRequests[:0]
 }
 
@@ -51,11 +55,11 @@ const (
 )
 
 // LoadFromDb loads subtries from a state database.
-func (stl *SubTrieLoader) LoadSubTries(db ethdb.Database, blockNr uint64, rl RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) (SubTries, error) {
+func (stl *SubTrieLoader) LoadSubTries(db kv.RwTx, blockNr uint64, rl RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) (SubTries, error) {
 	return stl.LoadFromFlatDB(db, rl, hc, dbPrefixes, fixedbits, trace)
 }
 
-func (stl *SubTrieLoader) LoadFromFlatDB(db ethdb.Database, rl RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) (SubTries, error) {
+func (stl *SubTrieLoader) LoadFromFlatDB(db kv.RwTx, rl RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) (SubTries, error) {
 	loader := NewFlatDbSubTrieLoader()
 	if err1 := loader.Reset(db, rl, rl, hc, dbPrefixes, fixedbits, trace); err1 != nil {
 		return SubTries{}, err1

@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/ledgerwatch/erigon/ethdb"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/ethdb/cbor"
+	"github.com/ledgerwatch/erigon/ethdb/olddb"
 )
 
 type Uint64 struct {
-	ethdb.RwCursor
+	kv.RwCursor
 }
 
-func NewUint64(b ethdb.RwCursor) *Uint64 {
+func NewUint64(b kv.RwCursor) *Uint64 {
 	return &Uint64{b}
 }
 
@@ -73,7 +74,7 @@ func (b *Uint64) Put(key []byte, value uint64) error {
 }
 
 func (b *Uint64) ForEach(fn func([]byte, uint64) error) error {
-	return ethdb.ForEach(b.RwCursor, func(k, v []byte) (bool, error) {
+	return olddb.ForEach(b.RwCursor, func(k, v []byte) (bool, error) {
 		var value uint64
 		decoder := cbor.Decoder(bytes.NewReader(v))
 		defer cbor.Return(decoder)

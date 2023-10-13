@@ -6,8 +6,8 @@ import (
 	"encoding/csv"
 	"fmt"
 
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/common"
-	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 )
 
@@ -16,11 +16,11 @@ var (
 )
 
 type WitnessDBWriter struct {
-	storage     ethdb.Database
+	storage     kv.RwTx
 	statsWriter *csv.Writer
 }
 
-func NewWitnessDBWriter(storage ethdb.Database, statsWriter *csv.Writer) (*WitnessDBWriter, error) {
+func NewWitnessDBWriter(storage kv.RwTx, statsWriter *csv.Writer) (*WitnessDBWriter, error) {
 	err := statsWriter.Write([]string{
 		"blockNum", "maxTrieSize", "witnessesSize",
 	})
@@ -36,7 +36,7 @@ func (db *WitnessDBWriter) MustUpsert(blockNumber uint64, maxTrieSize uint32, re
 	var buf bytes.Buffer
 
 	for i, witness := range resolveWitnesses {
-		if _, err := witness.WriteTo(&buf); err != nil {
+		if _, err := witness.WriteInto(&buf); err != nil {
 			panic(fmt.Errorf("error while writing witness to a buffer: %w", err))
 		}
 		if i < len(resolveWitnesses)-1 {
@@ -46,7 +46,7 @@ func (db *WitnessDBWriter) MustUpsert(blockNumber uint64, maxTrieSize uint32, re
 
 	bytes := buf.Bytes()
 
-	batch := db.storage.NewBatch()
+	batch := db.storage
 
 	err := batch.Put(witnessesBucket, common.CopyBytes(key), common.CopyBytes(bytes))
 
@@ -73,16 +73,16 @@ func (db *WitnessDBWriter) MustUpsert(blockNumber uint64, maxTrieSize uint32, re
 }
 
 type WitnessDBReader struct {
-	getter ethdb.Getter
+	getter kv.Getter
 }
 
-func NewWitnessDBReader(getter ethdb.Getter) *WitnessDBReader {
+func NewWitnessDBReader(getter kv.Getter) *WitnessDBReader {
 	return &WitnessDBReader{getter}
 }
 
 func (db *WitnessDBReader) GetWitnessesForBlock(blockNumber uint64, maxTrieSize uint32) ([]byte, error) {
 	key := deriveDbKey(blockNumber, maxTrieSize)
-	return db.getter.Get(witnessesBucket, key)
+	return db.getter.GetOne(witnessesBucket, key)
 }
 
 func deriveDbKey(blockNumber uint64, maxTrieSize uint32) []byte {

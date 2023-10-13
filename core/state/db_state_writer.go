@@ -35,6 +35,7 @@ func NewDbStateWriter(db putDel, blockNr uint64) *DbStateWriter {
 
 type DbStateWriter struct {
 	db      putDel
+	pw      *PreimageWriter
 	blockNr uint64
 	csw     *ChangeSetWriter
 }

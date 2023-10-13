@@ -8,19 +8,23 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 
-	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon-lib/kv/kvcfg"
+	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
+	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
-	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
+	"github.com/ledgerwatch/erigon/core/rawdb/blockio"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/core/vm"
-	"github.com/ledgerwatch/erigon/ethdb"
-	"github.com/ledgerwatch/erigon/params"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/erigon/turbo/services"
+	"github.com/ledgerwatch/erigon/turbo/snapshotsync/freezeblocks"
+	"github.com/ledgerwatch/log/v3"
 )
 
 const (
@@ -29,10 +33,10 @@ const (
 )
 
 type BlockProvider interface {
-	core.ChainContext
 	io.Closer
 	FastFwd(uint64) error
 	NextBlock() (*types.Block, error)
+	Header(blockNum uint64, blockHash common.Hash) (*types.Header, error)
 }
 
 func BlockProviderForURI(uri string, createDBFunc CreateDbFunc) (BlockProvider, error) {
@@ -52,37 +56,38 @@ func BlockProviderForURI(uri string, createDBFunc CreateDbFunc) (BlockProvider, 
 	}
 }
 
+func blocksIO(db kv.RoDB) (services.FullBlockReader, *blockio.BlockWriter) {
+	var histV3 bool
+	if err := db.View(context.Background(), func(tx kv.Tx) error {
+		histV3, _ = kvcfg.HistoryV3.Enabled(tx)
+		return nil
+	}); err != nil {
+		panic(err)
+	}
+	br := freezeblocks.NewBlockReader(freezeblocks.NewRoSnapshots(ethconfig.BlocksFreezing{Enabled: false}, "", log.New()), nil /* BorSnapshots */)
+	bw := blockio.NewBlockWriter(histV3)
+	return br, bw
+}
+
 type BlockChainBlockProvider struct {
 	currentBlock uint64
-	bc           *core.BlockChain
-	db           ethdb.Database
+	br           services.FullBlockReader
+	db           kv.RwDB
 }
 
 func NewBlockProviderFromDB(path string, createDBFunc CreateDbFunc) (BlockProvider, error) {
 	ethDB, err := createDBFunc(path)
-	if err != nil {
-		return nil, err
-	}
-	chainConfig := params.MainnetChainConfig
-	engine := ethash.NewFullFaker()
-	txCacher := core.NewTxSenderCacher(runtime.NumCPU())
-	chain, err := core.NewBlockChain(ethDB, nil, chainConfig, engine, vm.Config{}, nil, txCacher)
+
+	br, _ := blocksIO(ethDB)
+
 	if err != nil {
 		return nil, err
 	}
 
 	return &BlockChainBlockProvider{
-		bc: chain,
+		br: br,
 		db: ethDB,
 	}, nil
-}
-
-func (p *BlockChainBlockProvider) Engine() consensus.Engine {
-	return p.bc.Engine()
-}
-
-func (p *BlockChainBlockProvider) GetHeader(h common.Hash, i uint64) *types.Header {
-	return p.bc.GetHeader(h, i)
 }
 
 func (p *BlockChainBlockProvider) Close() error {
@@ -96,16 +101,43 @@ func (p *BlockChainBlockProvider) FastFwd(to uint64) error {
 }
 
 func (p *BlockChainBlockProvider) NextBlock() (*types.Block, error) {
-	block := p.bc.GetBlockByNumber(p.currentBlock)
+	tx, err := p.db.BeginRo(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	defer tx.Rollback()
+
+	block, err := p.br.BlockByNumber(context.Background(), tx, p.currentBlock)
 	p.currentBlock++
 	return block, nil
+}
+
+func (p *BlockChainBlockProvider) Header(blockNum uint64, blockHash common.Hash) (*types.Header, error) {
+	tx, err := p.db.BeginRo(context.Background())
+	if err != nil {
+		panic(fmt.Errorf("error opening tx: %w", err))
+	}
+
+	defer tx.Rollback()
+
+	h, err := p.br.HeaderByNumber(context.Background(), tx, blockNum)
+	if err != nil {
+		h, err := p.br.HeaderByHash(context.Background(), tx, blockHash)
+		if err != nil {
+			return nil, err
+		}
+		return h, nil
+	}
+	return h, err
+
 }
 
 type ExportFileBlockProvider struct {
 	stream          *rlp.Stream
 	engine          consensus.Engine
-	headersDB       ethdb.Database
-	batch           ethdb.DbWithPendingMutations
+	headersDB       kv.RwDB
+	batch           kv.RwTx
 	fh              *os.File
 	reader          io.Reader
 	lastBlockNumber int64
@@ -127,7 +159,7 @@ func NewBlockProviderFromExportFile(fn string) (BlockProvider, error) {
 	stream := rlp.NewStream(reader, 0)
 	engine := ethash.NewFullFaker()
 	// keeping all the past block headers in memory
-	headersDB := ethdb.MustOpen(getTempFileName())
+	headersDB := mdbx.MustOpen(getTempFileName())
 	return &ExportFileBlockProvider{stream, engine, headersDB, nil, fh, reader, -1}, nil
 }
 
@@ -147,17 +179,25 @@ func (p *ExportFileBlockProvider) Close() error {
 
 func (p *ExportFileBlockProvider) WriteHeader(h *types.Header) {
 	if p.batch == nil {
-		p.batch = p.headersDB.NewBatch()
-	}
-
-	rawdb.WriteHeader(context.TODO(), p.batch, h)
-
-	if p.batch.BatchSize() > 1000 {
-		if err := p.batch.Commit(); err != nil {
-			panic(fmt.Errorf("error writing headers: %w", err))
+		tx, err := p.headersDB.BeginRw(context.Background())
+		if err != nil {
+			panic(fmt.Errorf("error opening tx: %w", err))
 		}
-		p.batch = nil
+		defer tx.Rollback()
+
+		batch := memdb.NewMemoryBatch(tx, "")
+		defer batch.Rollback()
+		if err != nil {
+			panic(fmt.Errorf("error opening batch: %w", err))
+		}
+		p.batch = batch
 	}
+
+	rawdb.WriteHeader(p.batch, h)
+}
+
+func (p *ExportFileBlockProvider) Header(blockNum uint64, blockHash common.Hash) (*types.Header, error) {
+	panic("implement me")
 }
 
 func (p *ExportFileBlockProvider) resetStream() error {
@@ -224,8 +264,21 @@ func (p *ExportFileBlockProvider) Engine() consensus.Engine {
 }
 
 func (p *ExportFileBlockProvider) GetHeader(h common.Hash, i uint64) *types.Header {
-	if p.batch != nil {
-		return rawdb.ReadHeader(p.batch, h, i)
+	if p.batch == nil {
+		tx, err := p.headersDB.BeginRw(context.Background())
+		if err != nil {
+			panic(fmt.Errorf("error opening tx: %w", err))
+		}
+
+		defer tx.Rollback()
+
+		batch := memdb.NewMemoryBatch(tx, "")
+		defer batch.Rollback()
+		if err != nil {
+			panic(fmt.Errorf("error opening batch: %w", err))
+		}
+		p.batch = batch
 	}
-	return rawdb.ReadHeader(p.headersDB, h, i)
+
+	return rawdb.ReadHeader(p.batch, h, i)
 }

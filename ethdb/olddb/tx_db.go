@@ -58,6 +58,22 @@ func (m *TxDb) cursor(bucket string) (kv.Cursor, error) {
 	return c, nil
 }
 
+func ForEach(c kv.Cursor, walker func(k, v []byte) (bool, error)) error {
+	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
+		if err != nil {
+			return err
+		}
+		ok, err := walker(k, v)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+	}
+	return nil
+}
+
 func (m *TxDb) IncrementSequence(bucket string, amount uint64) (res uint64, err error) {
 	return m.tx.(kv.RwTx).IncrementSequence(bucket, amount)
 }

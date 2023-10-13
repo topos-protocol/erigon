@@ -17,7 +17,6 @@ import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
-	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethdb/cbor"
@@ -723,7 +722,7 @@ func storageUsage() {
 	count := 0
 	var leafSize uint64
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		c, err := tx.Cursor(dbutils.HashedStorageBucket)
+		c, err := tx.Cursor(kv.HashedStorage)
 		if err != nil {
 			return err
 		}
@@ -735,7 +734,7 @@ func storageUsage() {
 			copy(addr[:], k[:20])
 			del, ok := deleted[addr]
 			if !ok {
-				vv, err := tx.GetOne(dbutils.HashedStorageBucket, crypto.Keccak256(addr[:]))
+				vv, err := tx.GetOne(kv.HashedStorage, crypto.Keccak256(addr[:]))
 				if err != nil {
 					return err
 				}
@@ -839,7 +838,7 @@ func tokenUsage() {
 	//itemsByCreator := make(map[libcommon.Address]int)
 	count := 0
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		c, err := tx.Cursor(dbutils.HashedStorageBucket)
+		c, err := tx.Cursor(kv.HashedStorage)
 
 		if err != nil {
 			return err
@@ -919,7 +918,7 @@ func nonTokenUsage() {
 	//itemsByCreator := make(map[libcommon.Address]int)
 	count := 0
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		c, err := tx.Cursor(dbutils.HashedStorageBucket)
+		c, err := tx.Cursor(kv.HashedStorage)
 
 		if err != nil {
 			return err
@@ -979,12 +978,12 @@ func dustEOA() {
 	defer db.Close()
 	count := 0
 	eoas := 0
-	maxBalance := uint256.NewInt().SetUint64(1000000000000000000)
+	maxBalance := uint256.NewInt(0).SetUint64(1000000000000000000)
 	// Go through the current state
 	thresholdMap := make(map[uint64]int)
 	var a accounts.Account
-	if err := db.KV().View(context.Background(), func(tx kv.Tx) error {
-		c, err := tx.Cursor(dbutils.HashedAccountsBucket)
+	if err := db.View(context.Background(), func(tx kv.Tx) error {
+		c, err := tx.Cursor(kv.HashedAccounts)
 
 		if err != nil {
 			return err
