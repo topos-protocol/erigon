@@ -126,11 +126,7 @@ func (fstl *FlatDbSubTrieLoader) Reset(db kv.RwTx, rl RetainDecider, receiverDec
 	if len(dbPrefixes) == 0 {
 		return nil
 	}
-	if hasTx, ok := db.(ethdb.HasTx); ok {
-		fstl.tx = hasTx.Tx()
-	} else {
-		return fmt.Errorf("database doest not implement Tx: %T", db)
-	}
+	fstl.tx = db
 	fixedbytes := make([]int, len(fixedbits))
 	masks := make([]byte, len(fixedbits))
 	cutoffs := make([]int, len(fixedbits))
@@ -590,8 +586,7 @@ func (fstl *FlatDbSubTrieLoader) LoadSubTries() (SubTries, error) {
 	if len(fstl.dbPrefixes) == 0 {
 		return SubTries{}, nil
 	}
-	tx := fstl.tx
-	c, err := tx.Cursor(kv.CurrentState)
+	c, err := fstl.tx.Cursor(kv.HashedStorage)
 
 	if err != nil {
 		return SubTries{}, err
@@ -615,7 +610,7 @@ func (fstl *FlatDbSubTrieLoader) LoadSubTries() (SubTries, error) {
 		return true, nil
 	}
 
-	cursorDupSort, err := tx.CursorDupSort(kv.IntermediateTrieHash)
+	cursorDupSort, err := fstl.tx.CursorDupSort(kv.IntermediateTrieHash)
 
 	if err != nil {
 		return SubTries{}, err

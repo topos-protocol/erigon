@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -26,6 +27,7 @@ import (
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/visual"
+	"github.com/ledgerwatch/log/v3"
 	"github.com/wcharczuk/go-chart"
 	"github.com/wcharczuk/go-chart/drawing"
 )
@@ -179,30 +181,29 @@ func Stateless(
 	check(err)
 	defer blockProvider.Close()
 
-	stateDb, err := createDb(statefile)
-	check(err)
-	defer stateDb.Close()
 	var starkBlocks map[uint64]struct{}
 	if starkBlocksFile != "" {
 		starkBlocks, err = parseStarkBlockFile(starkBlocksFile)
 		check(err)
 	}
+
+	db, err := createDb(statefile)
+	check(err)
+	defer db.Close()
+
 	var preRoot common.Hash
-	// if blockNum == 1 {
-	// 	_, _, _, err = core.SetupGenesisBlock(stateDb, core.DefaultGenesisBlock(), writeHistory, true /* overwrite */)
-	// 	check(err)
-	// 	db := ethdb.NewMemDatabase()
-	// 	defer db.Close()
-	// 	genesisBlock, _, err1 := core.DefaultGenesisBlock().ToBlock(db, writeHistory)
-	// 	check(err1)
-	// 	preRoot = genesisBlock.Header().Root
-	// }
+	if blockNum == 1 {
+		genesis := core.DeveloperGenesisBlock(5, core.DevnetEtherbase)
+		_, genesisBlock, err := core.CommitGenesisBlock(db, genesis, "", log.New())
+		check(err)
+		preRoot = genesisBlock.Header().Root
+	}
 
 	chainConfig := params.MainnetChainConfig
 	vmConfig := vm.Config{}
 	engine := ethash.NewFullFaker()
 
-	if blockNum > 0 {
+	if blockNum > 1 {
 		if errBc := blockProvider.FastFwd(blockNum - 1); errBc != nil {
 			check(errBc)
 		}
@@ -219,15 +220,32 @@ func Stateless(
 		}
 	}
 
-	tx, err := stateDb.BeginRw(context.Background())
-	batch := memdb.NewMemoryBatch(tx, "")
+	if blockNum > 1 {
+		if errBc := blockProvider.FastFwd(blockNum - 1); errBc != nil {
+			check(errBc)
+		}
+		block, errBc := blockProvider.NextBlock()
+		check(errBc)
+		fmt.Printf("Block number: %d\n", blockNum-1)
+		fmt.Printf("Block root hash: %x\n", block.Root())
+		preRoot = block.Root()
+	}
 
+	tx, err := db.BeginRw(context.Background())
+
+	check(err)
+	defer tx.Rollback()
+
+	batch := memdb.NewMemoryBatch(tx, filepath.Join(statefile, "temp"))
 	defer batch.Rollback()
+
 	defer func() {
 		if err = batch.Commit(); err != nil {
 			fmt.Printf("Failed to commit batch: %v\n", err)
 		}
 	}()
+
+	fmt.Printf("Preroot hash: %x\n", preRoot)
 
 	tds := state.NewTrieDbState(preRoot, batch, blockNum-1)
 	tds.SetResolveReads(false)
@@ -249,18 +267,9 @@ func Stateless(
 	}
 
 	if witnessDatabasePath != "" {
-		var db kv.RwDB
-		db, err = createDb(witnessDatabasePath)
-
-		tx, err := db.BeginRw(context.Background())
-		defer tx.Rollback()
-
-		check(err)
-		defer db.Close()
-
 		if useStatelessResolver {
-			witnessDBReader = NewWitnessDBReader(tx)
-			fmt.Printf("Will use the stateless resolver with DB: %s\n", witnessDatabasePath)
+			witnessDBReader = NewWitnessDBReader(batch)
+			// fmt.Printf("Will use the stateless resolver with DB: %s\n", witnessDatabasePath)
 		} else {
 			statsFilePath := fmt.Sprintf("%v.stats.csv", witnessDatabasePath)
 
@@ -272,7 +281,7 @@ func Stateless(
 			statsFileCsv := csv.NewWriter(file)
 			defer statsFileCsv.Flush()
 
-			witnessDBWriter, err = NewWitnessDBWriter(tx, statsFileCsv)
+			witnessDBWriter, err = NewWitnessDBWriter(batch, statsFileCsv)
 			check(err)
 			fmt.Printf("witnesses will be stored to a db at path: %s\n\tstats: %s\n", witnessDatabasePath, statsFilePath)
 		}

@@ -260,6 +260,7 @@ func NewTrieDbState(root libcommon.Hash, db kv.RwTx, blockNr uint64) *TrieDbStat
 	tp.SetBlockNumber(blockNr)
 
 	t.AddObserver(tp)
+	t.AddObserver(NewIntermediateHashes(tds.db, tds.db))
 
 	return tds
 }
@@ -580,11 +581,16 @@ func (tds *TrieDbState) resolveAccountAndStorageTouches(accountTouches libcommon
 		rl.AddHex(nibbles)
 	}
 
+	// fmt.Printf("tds.t %x", tds.t.Root())
+
 	dbPrefixes, fixedbits, hooks := tds.t.FindSubTriesToLoad(rl)
 	// FindSubTriesToLoad would have gone through the entire rs, so we need to rewind to the beginning
 	rl.Rewind()
 	loader := trie.NewSubTrieLoader(tds.blockNr)
 	subTries, err := loadFunc(loader, rl, dbPrefixes, fixedbits)
+
+	// log.Warn("SubTries", "Hashes", subTries.Hashes, "Roots", subTries.Roots(), "accountTouches", accountTouches, "storageTouches", storageTouches, "dbPrefixes", dbPrefixes, "fixedbits", fixedbits, "hooks", hooks)
+
 	if err != nil {
 		return err
 	}

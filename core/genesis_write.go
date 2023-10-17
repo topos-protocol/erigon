@@ -207,7 +207,10 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 				}
 			}
 		}
-		stateWriter = state.NewPlainStateWriter(tx, tx, 0)
+		// stateWriter = state.NewPlainStateWriter(tx, tx, 0)
+
+		tds := state.NewTrieDbState(block.Header().Root, tx, 0)
+		stateWriter = tds.DbStateWriter()
 	}
 
 	if block.Number().Sign() != 0 {

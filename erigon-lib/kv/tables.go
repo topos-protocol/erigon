@@ -118,7 +118,6 @@ const (
 	//value - storage value(common.hash)
 	HashedAccounts = "HashedAccount"
 	HashedStorage  = "HashedStorage"
-	CurrentState   = "CurrentState"
 )
 
 /*
@@ -233,6 +232,7 @@ Invariants:
 const TrieOfAccounts = "TrieAccount"
 const TrieOfStorage = "TrieStorage"
 const IntermediateTrieHash = "IntermediateTrieHash"
+const Witnesses = "witnesses"
 
 // Mapping [block number] => [Verkle Root]
 const VerkleRoots = "VerkleRoots"
@@ -596,6 +596,9 @@ var ChaindataTables = []string{
 	Attestetations,
 	LightClient,
 	LightClientUpdates,
+	IntermediateTrieHash,
+	PreimagePrefix,
+	Witnesses,
 }
 
 const (

@@ -87,6 +87,10 @@ func NewTestRLPTrie(root libcommon.Hash) *Trie {
 }
 
 func (t *Trie) AddObserver(observer Observer) {
+	if t.observers == nil {
+		t.observers = NewTrieObserverMux()
+	}
+
 	t.observers.AddChild(observer)
 }
 
@@ -767,6 +771,12 @@ func (t *Trie) touchAll(n node, hex []byte, del bool, incarnation uint64) {
 			t.touchAll(n.Val, hexVal, del, incarnation)
 		}
 	case *duoNode:
+		if del {
+			t.observers.BranchNodeDeleted(hex)
+		} else {
+			t.observers.BranchNodeCreated(hex)
+			t.observers.BranchNodeLoaded(hex, incarnation)
+		}
 		i1, i2 := n.childrenIdx()
 		hex1 := make([]byte, len(hex)+1)
 		copy(hex1, hex)
@@ -777,12 +787,23 @@ func (t *Trie) touchAll(n node, hex []byte, del bool, incarnation uint64) {
 		t.touchAll(n.child1, hex1, del, incarnation)
 		t.touchAll(n.child2, hex2, del, incarnation)
 	case *fullNode:
+		if del {
+			t.observers.BranchNodeDeleted(hex)
+		} else {
+			t.observers.BranchNodeCreated(hex)
+			t.observers.BranchNodeLoaded(hex, incarnation)
+		}
 		for i, child := range n.Children {
 			if child != nil {
 				t.touchAll(child, concat(hex, byte(i)), del, incarnation)
 			}
 		}
 	case *accountNode:
+		if del {
+			t.observers.CodeNodeDeleted(hex)
+		} else {
+			t.observers.CodeNodeTouched(hex)
+		}
 		if n.storage != nil {
 			t.touchAll(n.storage, hex, del, n.Incarnation)
 		}
@@ -1157,6 +1178,7 @@ func (t *Trie) notifyUnloadRecursive(hex []byte, incarnation uint64, nd node) {
 		}
 		t.notifyUnloadRecursive(hex, n.Incarnation, n.storage)
 	case *fullNode:
+		t.observers.WillUnloadBranchNode(hex, libcommon.BytesToHash(n.reference()), incarnation)
 		for i := range n.Children {
 			if n.Children[i] == nil {
 				continue
@@ -1167,6 +1189,7 @@ func (t *Trie) notifyUnloadRecursive(hex []byte, incarnation uint64, nd node) {
 			t.notifyUnloadRecursive(append(hex, uint8(i)), incarnation, n.Children[i])
 		}
 	case *duoNode:
+		t.observers.WillUnloadBranchNode(hex, libcommon.BytesToHash(n.reference()), incarnation)
 		i1, i2 := n.childrenIdx()
 		if n.child1 != nil {
 			t.notifyUnloadRecursive(append(hex, i1), incarnation, n.child1)
