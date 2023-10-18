@@ -17,6 +17,8 @@
 package rawdb
 
 import (
+	"fmt"
+
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 
@@ -24,7 +26,23 @@ import (
 )
 
 func ReadAccount(db kv.Tx, addr libcommon.Address, acc *accounts.Account) (bool, error) {
-	enc, err := db.GetOne(kv.PlainState, addr[:])
+	fmt.Printf("ReadAccount hash: %x\n", addr)
+	enc, err := db.GetOne(kv.HashedAccounts, addr[:])
+	if err != nil {
+		return false, err
+	}
+	if len(enc) == 0 {
+		return false, nil
+	}
+	if err = acc.DecodeForStorage(enc); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func ReadAccountByHash(db kv.Tx, addr libcommon.Hash, acc *accounts.Account) (bool, error) {
+	fmt.Printf("ReadAccount hash: %x\n", addr)
+	enc, err := db.GetOne(kv.HashedAccounts, addr[:])
 	if err != nil {
 		return false, err
 	}

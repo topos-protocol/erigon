@@ -997,8 +997,8 @@ func (tds *TrieDbState) readAccountDataByHash(addrHash libcommon.Hash) (*account
 
 	// Not present in the trie, try the database
 	var a accounts.Account
-	addr := libcommon.BytesToAddress(addrHash[:])
-	if ok, err := rawdb.ReadAccount(tds.db, addr, &a); err != nil {
+	// addr := libcommon.BytesToAddress(addrHash[:])
+	if ok, err := rawdb.ReadAccountByHash(tds.db, addrHash, &a); err != nil {
 		return nil, err
 	} else if !ok {
 		return nil, nil

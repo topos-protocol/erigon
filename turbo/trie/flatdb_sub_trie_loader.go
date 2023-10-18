@@ -586,7 +586,7 @@ func (fstl *FlatDbSubTrieLoader) LoadSubTries() (SubTries, error) {
 	if len(fstl.dbPrefixes) == 0 {
 		return SubTries{}, nil
 	}
-	c, err := fstl.tx.Cursor(kv.HashedStorage)
+	c, err := fstl.tx.Cursor(kv.HashedAccounts)
 
 	if err != nil {
 		return SubTries{}, err

@@ -24,7 +24,9 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/cmp"
+	"github.com/ledgerwatch/erigon-lib/common/length"
 
+	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/ethdb"
@@ -52,6 +54,8 @@ type Trie struct {
 
 	newHasherFunc func() *hasher
 
+	hashMap map[libcommon.Hash]node
+
 	observers *ObserverMux
 }
 
@@ -66,6 +70,8 @@ type Trie struct {
 func New(root libcommon.Hash) *Trie {
 	trie := &Trie{
 		newHasherFunc: func() *hasher { return newHasher( /*valueNodesRlpEncoded = */ false) },
+		hashMap:       make(map[libcommon.Hash]node),
+		observers:     NewTrieObserverMux(),
 	}
 	if (root != libcommon.Hash{}) && root != EmptyRoot {
 		trie.root = hashNode{hash: root[:]}
@@ -79,6 +85,8 @@ func NewTestRLPTrie(root libcommon.Hash) *Trie {
 	trie := &Trie{
 		valueNodesRLPEncoded: true,
 		newHasherFunc:        func() *hasher { return newHasher( /*valueNodesRlpEncoded = */ true) },
+		hashMap:              make(map[libcommon.Hash]node),
+		observers:            NewTrieObserverMux(),
 	}
 	if (root != libcommon.Hash{}) && root != EmptyRoot {
 		trie.root = hashNode{hash: root[:]}
@@ -133,6 +141,8 @@ func (t *Trie) GetAccountCode(key []byte) (value []byte, gotValue bool) {
 			return nil, gotValue
 		}
 
+		t.observers.CodeNodeTouched(hex)
+
 		if accNode.code == nil {
 			return nil, false
 		}
@@ -180,6 +190,7 @@ func (t *Trie) getAccount(origNode node, key []byte, pos int) (value *accountNod
 			return nil, true
 		}
 	case *duoNode:
+		t.observers.BranchNodeTouched(key[:pos])
 		i1, i2 := n.childrenIdx()
 		switch key[pos] {
 		case i1:
@@ -190,6 +201,7 @@ func (t *Trie) getAccount(origNode node, key []byte, pos int) (value *accountNod
 			return nil, true
 		}
 	case *fullNode:
+		t.observers.BranchNodeTouched(key[:pos])
 		child := n.Children[key[pos]]
 		return t.getAccount(child, key, pos+1)
 	case hashNode:
@@ -219,6 +231,7 @@ func (t *Trie) get(origNode node, key []byte, pos int) (value []byte, gotValue b
 		}
 		return
 	case *duoNode:
+		t.observers.BranchNodeTouched(key[:pos])
 		i1, i2 := n.childrenIdx()
 		switch key[pos] {
 		case i1:
@@ -230,6 +243,7 @@ func (t *Trie) get(origNode node, key []byte, pos int) (value []byte, gotValue b
 		}
 		return
 	case *fullNode:
+		t.observers.BranchNodeTouched(key[:pos])
 		child := n.Children[key[pos]]
 		if child == nil {
 			return nil, true
@@ -516,11 +530,17 @@ func (t *Trie) insertRecursive(origNode node, key []byte, pos int, value node) (
 				origAccN.rootCorrect = false
 			}
 			newNode = origAccN
+			if len(origAccN.code) > 0 {
+				t.observers.CodeNodeSizeChanged(key[:pos-1], uint(len(origAccN.code)))
+			} else {
+				t.observers.CodeNodeDeleted(key[:pos-1])
+			}
 			return
 		}
 
 		// replacing nodes except accounts
 		if !origNok {
+			t.evictSubtreeFromHashMap(origNode)
 			return true, value
 		}
 	}
@@ -543,12 +563,14 @@ func (t *Trie) insertRecursive(origNode node, key []byte, pos int, value node) (
 		if matchlen == len(n.Key) || n.Key[matchlen] == 16 {
 			updated, nn = t.insertRecursive(n.Val, key, pos+matchlen, value)
 			if updated {
+				t.evictNodeFromHashMap(n)
 				n.Val = nn
 				n.ref.len = 0
 			}
 			newNode = n
 		} else {
 			// Otherwise branch out at the index where they differ.
+			t.evictNodeFromHashMap(n)
 			var c1 node
 			if len(n.Key) == matchlen+1 {
 				c1 = n.Val
@@ -581,16 +603,19 @@ func (t *Trie) insertRecursive(origNode node, key []byte, pos int, value node) (
 				n.ref.len = 0
 				newNode = n
 			}
+			t.observers.BranchNodeCreated(key[:pos+matchlen])
 			updated = true
 		}
 		return
 
 	case *duoNode:
+		t.observers.BranchNodeTouched(key[:pos])
 		i1, i2 := n.childrenIdx()
 		switch key[pos] {
 		case i1:
 			updated, nn = t.insertRecursive(n.child1, key, pos+1, value)
 			if updated {
+				t.evictNodeFromHashMap(n)
 				n.child1 = nn
 				n.ref.len = 0
 			}
@@ -598,11 +623,13 @@ func (t *Trie) insertRecursive(origNode node, key []byte, pos int, value node) (
 		case i2:
 			updated, nn = t.insertRecursive(n.child2, key, pos+1, value)
 			if updated {
+				t.evictNodeFromHashMap(n)
 				n.child2 = nn
 				n.ref.len = 0
 			}
 			newNode = n
 		default:
+			t.evictNodeFromHashMap(n)
 			var child node
 			if len(key) == pos+1 {
 				child = value
@@ -620,8 +647,10 @@ func (t *Trie) insertRecursive(origNode node, key []byte, pos int, value node) (
 		return
 
 	case *fullNode:
+		t.observers.BranchNodeTouched(key[:pos])
 		child := n.Children[key[pos]]
 		if child == nil {
+			t.evictNodeFromHashMap(n)
 			if len(key) == pos+1 {
 				n.Children[key[pos]] = value
 			} else {
@@ -632,6 +661,7 @@ func (t *Trie) insertRecursive(origNode node, key []byte, pos int, value node) (
 		} else {
 			updated, nn = t.insertRecursive(child, key, pos+1, value)
 			if updated {
+				t.evictNodeFromHashMap(n)
 				n.Children[key[pos]] = nn
 				n.ref.len = 0
 			}
@@ -667,6 +697,9 @@ func (t *Trie) getNode(hex []byte, doTouch bool) (node, node, bool, uint64) {
 				return nil, nil, false, incarnation
 			}
 		case *duoNode:
+			if doTouch {
+				t.observers.BranchNodeTouched(hex[:pos])
+			}
 			i1, i2 := n.childrenIdx()
 			switch hex[pos] {
 			case i1:
@@ -681,6 +714,9 @@ func (t *Trie) getNode(hex []byte, doTouch bool) (node, node, bool, uint64) {
 				return nil, nil, false, incarnation
 			}
 		case *fullNode:
+			if doTouch {
+				t.observers.BranchNodeTouched(hex[:pos])
+			}
 			child := n.Children[hex[pos]]
 			if child == nil {
 				return nil, nil, false, incarnation
@@ -758,6 +794,14 @@ func (t *Trie) hook(hex []byte, n node, hash []byte) error {
 }
 
 func (t *Trie) touchAll(n node, hex []byte, del bool, incarnation uint64) {
+	if del {
+		t.evictNodeFromHashMap(n)
+	} else if len(n.reference()) == length.Hash {
+		var key libcommon.Hash
+		copy(key[:], n.reference())
+		t.hashMap[key] = n
+	}
+
 	switch n := n.(type) {
 	case *shortNode:
 		if _, ok := n.Val.(valueNode); !ok {
@@ -826,6 +870,7 @@ func (t *Trie) convertToShortNode(child node, pos uint) node {
 		// might not be loaded yet, resolve it just for this
 		// check.
 		if short, ok := child.(*shortNode); ok {
+			t.evictNodeFromHashMap(child)
 			k := make([]byte, len(short.Key)+1)
 			k[0] = byte(pos)
 			copy(k[1:], short.Key)
@@ -860,6 +905,7 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 			}
 
 			if removeNodeEntirely {
+				t.evictNodeFromHashMap(n)
 				updated = true
 				touchKey := key[:keyStart+matchlen]
 				if touchKey[len(touchKey)-1] == 16 {
@@ -876,6 +922,7 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 				if !updated {
 					newNode = n
 				} else {
+					t.evictNodeFromHashMap(n)
 					if nn == nil {
 						newNode = nil
 					} else {
@@ -908,10 +955,14 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 			updated, nn = t.deleteRecursive(n.child1, key, keyStart+1, preserveAccountNode, incarnation)
 			if !updated {
 				newNode = n
+				t.observers.BranchNodeTouched(key[:keyStart])
 			} else {
+				t.evictNodeFromHashMap(n)
 				if nn == nil {
 					newNode = t.convertToShortNode(n.child2, uint(i2))
+					t.observers.BranchNodeDeleted(key[:keyStart])
 				} else {
+					t.observers.BranchNodeTouched(key[:keyStart])
 					n.child1 = nn
 					n.ref.len = 0
 					newNode = n
@@ -921,10 +972,14 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 			updated, nn = t.deleteRecursive(n.child2, key, keyStart+1, preserveAccountNode, incarnation)
 			if !updated {
 				newNode = n
+				t.observers.BranchNodeTouched(key[:keyStart])
 			} else {
+				t.evictNodeFromHashMap(n)
 				if nn == nil {
 					newNode = t.convertToShortNode(n.child1, uint(i1))
+					t.observers.BranchNodeDeleted(key[:keyStart])
 				} else {
+					t.observers.BranchNodeTouched(key[:keyStart])
 					n.child2 = nn
 					n.ref.len = 0
 					newNode = n
@@ -942,6 +997,7 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 		if !updated {
 			newNode = n
 		} else {
+			t.evictNodeFromHashMap(n)
 			n.Children[key[keyStart]] = nn
 			// Check how many non-nil entries are left after deleting and
 			// reduce the full node to a short node if only one entry is
@@ -970,7 +1026,9 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 			}
 			if count == 1 {
 				newNode = t.convertToShortNode(n.Children[pos1], uint(pos1))
+				t.observers.BranchNodeDeleted(key[:keyStart])
 			} else if count == 2 {
+				t.observers.BranchNodeTouched(key[:keyStart])
 				duo := &duoNode{}
 				if pos1 == int(key[keyStart]) {
 					duo.child1 = nn
@@ -985,6 +1043,7 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 				duo.mask = (1 << uint(pos1)) | (uint32(1) << uint(pos2))
 				newNode = duo
 			} else if count > 2 {
+				t.observers.BranchNodeTouched(key[:keyStart])
 				// n still contains at least three values and cannot be reduced.
 				n.ref.len = 0
 				newNode = n
@@ -1013,6 +1072,7 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 				n.code = nil
 				n.Root = EmptyRoot
 				n.rootCorrect = true
+				t.observers.CodeNodeDeleted(h)
 				return true, n
 			}
 
@@ -1130,6 +1190,8 @@ func (t *Trie) EvictNode(hex []byte) {
 		// can work with other nodes type
 	}
 
+	t.evictSubtreeFromHashMap(nd)
+
 	var hn libcommon.Hash
 	if nd == nil {
 		fmt.Printf("nd == nil, hex %x, parent node: %T\n", hex, parent)
@@ -1137,6 +1199,7 @@ func (t *Trie) EvictNode(hex []byte) {
 	}
 	copy(hn[:], nd.reference())
 	hnode := hashNode{hash: hn[:]}
+	t.observers.WillUnloadNode(hex, hn)
 
 	t.notifyUnloadRecursive(hex, incarnation, nd)
 
@@ -1208,4 +1271,57 @@ func (t *Trie) TrieSize() int {
 
 func (t *Trie) NumberOfAccounts() int {
 	return calcSubtreeNodes(t.root)
+}
+
+// GetNodeByHash gets node's RLP by hash.
+func (t *Trie) GetNodeByHash(hash libcommon.Hash) []byte {
+	nd := t.hashMap[hash]
+	if nd == nil {
+		return nil
+	}
+
+	h := t.getHasher()
+	defer returnHasherToPool(h)
+
+	rlp, err := h.hashChildren(nd, 0)
+	if err != nil {
+		return nil
+	}
+
+	return common.CopyBytes(rlp)
+}
+
+func (t *Trie) evictNodeFromHashMap(nd node) {
+	if nd == nil {
+		return
+	}
+	if len(nd.reference()) == length.Hash {
+		var key libcommon.Hash
+		copy(key[:], nd.reference())
+		delete(t.hashMap, key)
+	}
+}
+
+func (t *Trie) evictSubtreeFromHashMap(n node) {
+	t.evictNodeFromHashMap(n)
+
+	switch n := n.(type) {
+	case *shortNode:
+		if _, ok := n.Val.(valueNode); !ok {
+			t.evictSubtreeFromHashMap(n.Val)
+		}
+	case *duoNode:
+		t.evictSubtreeFromHashMap(n.child1)
+		t.evictSubtreeFromHashMap(n.child2)
+	case *fullNode:
+		for _, child := range n.Children {
+			if child != nil {
+				t.evictSubtreeFromHashMap(child)
+			}
+		}
+	case *accountNode:
+		if n.storage != nil {
+			t.evictSubtreeFromHashMap(n.storage)
+		}
+	}
 }

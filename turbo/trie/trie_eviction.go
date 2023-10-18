@@ -302,11 +302,11 @@ func (tp *Eviction) EvictToFitSize(
 	threshold uint64,
 ) bool {
 
-	if uint64(tp.generations.totalSize) <= threshold {
-		return false
-	}
+	// if uint64(tp.generations.totalSize) <= threshold {
+	// 	return false
+	// }
 
-	keys := tp.generations.popKeysToEvict(threshold)
+	keys := tp.generations.popKeysToEvict(0)
 
 	return evictList(evicter, keys)
 }

@@ -67,6 +67,10 @@ func (dsw *DbStateWriter) UpdateAccountData(address libcommon.Address, original,
 		return err
 	}
 	addrHash, err := common.HashData(address[:])
+
+	// addr := libcommon.BytesToAddress(addrHash[:])
+
+	fmt.Printf("Writing account hash: %x\n", addrHash)
 	if err != nil {
 		return err
 	}
@@ -86,13 +90,14 @@ func (dsw *DbStateWriter) DeleteAccount(address libcommon.Address, original *acc
 	if err != nil {
 		return err
 	}
+	// addr := libcommon.BytesToAddress(addrHash[:])
 	if err := dsw.db.Delete(kv.HashedAccounts, addrHash[:]); err != nil {
 		return err
 	}
 	if original.Incarnation > 0 {
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], original.Incarnation)
-		if err := dsw.db.Put(kv.IncarnationMap, address[:], b[:]); err != nil {
+		if err := dsw.db.Put(kv.IncarnationMap, addrHash[:], b[:]); err != nil {
 			return err
 		}
 	}

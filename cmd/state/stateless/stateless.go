@@ -199,26 +199,9 @@ func Stateless(
 		preRoot = genesisBlock.Header().Root
 	}
 
-	chainConfig := params.MainnetChainConfig
+	chainConfig := params.AllCliqueProtocolChanges
 	vmConfig := vm.Config{}
 	engine := ethash.NewFullFaker()
-
-	if blockNum > 1 {
-		if errBc := blockProvider.FastFwd(blockNum - 1); errBc != nil {
-			check(errBc)
-		}
-		block, errBc := blockProvider.NextBlock()
-		check(errBc)
-		fmt.Printf("Block number: %d\n", blockNum-1)
-		fmt.Printf("Block root hash: %x\n", block.Root())
-		preRoot = block.Root()
-
-		if verifySnapshot {
-			fmt.Println("Verifying snapshot..")
-			// checkRoots(stateDb, preRoot, blockNum-1)
-			fmt.Println("Verifying snapshot... OK")
-		}
-	}
 
 	if blockNum > 1 {
 		if errBc := blockProvider.FastFwd(blockNum - 1); errBc != nil {
@@ -244,8 +227,6 @@ func Stateless(
 			fmt.Printf("Failed to commit batch: %v\n", err)
 		}
 	}()
-
-	fmt.Printf("Preroot hash: %x\n", preRoot)
 
 	tds := state.NewTrieDbState(preRoot, batch, blockNum-1)
 	tds.SetResolveReads(false)
@@ -332,11 +313,18 @@ func Stateless(
 		for _, tx := range block.Transactions() {
 			receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, statedb, stateWriter, header, tx, usedGas, nil, vmConfig)
 			if err != nil {
-				fmt.Errorf("tx %x failed: %v", tx.Hash(), err)
+				check(fmt.Errorf("tx %x failed: %v", tx.Hash(), err))
 				return
 			}
 			receipts = append(receipts, receipt)
 		}
+
+		if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
+			fmt.Printf("Finalize of block %d failed: %v\n", blockNum, err)
+			return
+		}
+
+		statedb.FinalizeTx(chainConfig.Rules(header.Number.Uint64(), header.Time), tds.TrieStateWriter())
 
 		if witnessDBReader != nil {
 			tds.SetBlockNr(blockNum)

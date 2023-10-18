@@ -190,6 +190,9 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 		panic(err)
 	}
 
+	tds := state.NewTrieDbState(libcommon.Hash{}, tx, 0)
+	tds.StartNewBuffer()
+
 	var stateWriter state.StateWriter
 	if ethconfig.EnableHistoryV4InTest {
 		panic("implement me")
@@ -208,8 +211,6 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 			}
 		}
 		// stateWriter = state.NewPlainStateWriter(tx, tx, 0)
-
-		tds := state.NewTrieDbState(block.Header().Root, tx, 0)
 		stateWriter = tds.DbStateWriter()
 	}
 
@@ -217,9 +218,14 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 		return nil, statedb, fmt.Errorf("can't commit genesis block with number > 0")
 	}
 
+	if err := statedb.FinalizeTx(&chain.Rules{}, tds.TrieStateWriter()); err != nil {
+		return nil, statedb, fmt.Errorf("cannot write state: %w", err)
+	}
+
 	if err := statedb.CommitBlock(&chain.Rules{}, stateWriter); err != nil {
 		return nil, statedb, fmt.Errorf("cannot write state: %w", err)
 	}
+
 	if !histV3 {
 		if csw, ok := stateWriter.(state.WriterWithChangeSets); ok {
 			if err := csw.WriteChangeSets(); err != nil {
@@ -230,6 +236,17 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 			}
 		}
 	}
+
+	roots, err := tds.ComputeTrieRoots()
+
+	fmt.Printf("Root: %x\n", roots[len(roots)-1])
+
+	tds.EvictTries(false)
+
+	if err != nil {
+		return nil, statedb, err
+	}
+
 	return block, statedb, nil
 }
 func MustCommitGenesis(g *types.Genesis, db kv.RwDB, tmpDir string) *types.Block {
@@ -594,7 +611,7 @@ func GenesisToBlock(g *types.Genesis, tmpDir string) (*types.Block, *state.Intra
 				statedb.SetIncarnation(addr, state.FirstContractIncarnation)
 			}
 		}
-		if err = statedb.FinalizeTx(&chain.Rules{}, w); err != nil {
+		if err = statedb.SoftFinalizeTx(&chain.Rules{}, w); err != nil {
 			return
 		}
 		if root, err = trie.CalcRoot("genesis", tx); err != nil {
