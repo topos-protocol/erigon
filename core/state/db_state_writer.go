@@ -70,7 +70,6 @@ func (dsw *DbStateWriter) UpdateAccountData(address libcommon.Address, original,
 
 	// addr := libcommon.BytesToAddress(addrHash[:])
 
-	fmt.Printf("Writing account hash: %x\n", addrHash)
 	if err != nil {
 		return err
 	}

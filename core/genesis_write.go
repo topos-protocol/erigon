@@ -218,10 +218,6 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 		return nil, statedb, fmt.Errorf("can't commit genesis block with number > 0")
 	}
 
-	if err := statedb.FinalizeTx(&chain.Rules{}, tds.TrieStateWriter()); err != nil {
-		return nil, statedb, fmt.Errorf("cannot write state: %w", err)
-	}
-
 	if err := statedb.CommitBlock(&chain.Rules{}, stateWriter); err != nil {
 		return nil, statedb, fmt.Errorf("cannot write state: %w", err)
 	}
@@ -237,11 +233,7 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 		}
 	}
 
-	roots, err := tds.ComputeTrieRoots()
-
-	fmt.Printf("Root: %x\n", roots[len(roots)-1])
-
-	tds.EvictTries(false)
+	_, err = tds.ComputeTrieRoots()
 
 	if err != nil {
 		return nil, statedb, err

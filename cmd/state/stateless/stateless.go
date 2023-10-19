@@ -19,7 +19,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
-	"github.com/ledgerwatch/erigon/consensus/ethash"
+	"github.com/ledgerwatch/erigon/consensus"
+	"github.com/ledgerwatch/erigon/consensus/clique"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -41,7 +42,7 @@ var chartColors = []drawing.Color{
 	chart.ColorGreen,
 }
 
-func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.StateWriter, chainConfig *chain.Config, block *types.Block, vmConfig vm.Config) (types.Receipts, error) {
+func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.StateWriter, trieStateWriter state.StateWriter, blockWriter state.StateWriter, chainConfig *chain.Config, block *types.Block, vmConfig vm.Config, engine consensus.Engine) (types.Receipts, error) {
 	header := block.Header()
 
 	getHeader := func(hash common.Hash, number uint64) *types.Header {
@@ -52,7 +53,6 @@ func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.Stat
 	getHashFn := core.GetHashFn(block.Header(), getHeader)
 
 	vmConfig.TraceJumpDest = true
-	engine := ethash.NewFullFaker()
 	gp := new(core.GasPool).AddGas(block.GasLimit())
 	usedGas := new(uint64)
 	var receipts types.Receipts
@@ -67,6 +67,10 @@ func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.Stat
 			return nil, fmt.Errorf("tx %x failed: %v", tx.Hash(), err)
 		}
 		receipts = append(receipts, receipt)
+	}
+
+	if _, _, _, err := engine.FinalizeAndAssemble(chainConfig, block.Header(), ibs, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
+		return nil, err
 	}
 
 	return receipts, nil
@@ -201,7 +205,7 @@ func Stateless(
 
 	chainConfig := params.AllCliqueProtocolChanges
 	vmConfig := vm.Config{}
-	engine := ethash.NewFullFaker()
+	engine := clique.New(chainConfig, params.CliqueSnapshot, memdb.New(""), log.New())
 
 	if blockNum > 1 {
 		if errBc := blockProvider.FastFwd(blockNum - 1); errBc != nil {
@@ -311,7 +315,7 @@ func Stateless(
 		getHashFn := core.GetHashFn(block.Header(), getHeader)
 
 		for _, tx := range block.Transactions() {
-			receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, statedb, stateWriter, header, tx, usedGas, nil, vmConfig)
+			receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, statedb, tds.TrieStateWriter(), header, tx, usedGas, nil, vmConfig)
 			if err != nil {
 				check(fmt.Errorf("tx %x failed: %v", tx.Hash(), err))
 				return
@@ -323,8 +327,6 @@ func Stateless(
 			fmt.Printf("Finalize of block %d failed: %v\n", blockNum, err)
 			return
 		}
-
-		statedb.FinalizeTx(chainConfig.Rules(header.Number.Uint64(), header.Time), tds.TrieStateWriter())
 
 		if witnessDBReader != nil {
 			tds.SetBlockNr(blockNum)
@@ -366,6 +368,9 @@ func Stateless(
 		}
 		finalRootFail := false
 		execStart = time.Now()
+
+		fmt.Printf("Block number: %d, witnesses hex: %x\n", blockNum, blockWitness)
+
 		if blockNum >= witnessThreshold && blockWitness != nil { // blockWitness == nil means the extraction fails
 
 			var s *state.Stateless
@@ -398,7 +403,7 @@ func Stateless(
 			ibs := state.New(s)
 			ibs.SetTrace(trace)
 			s.SetBlockNr(blockNum)
-			if _, err = runBlock(blockProvider, ibs, stateWriter, chainConfig, block, vmConfig); err != nil {
+			if _, err = runBlock(blockProvider, ibs, s, tds.TrieStateWriter(), stateWriter, chainConfig, block, vmConfig, engine); err != nil {
 				fmt.Printf("Error running block %d through stateless2: %v\n", blockNum, err)
 				finalRootFail = true
 			} else if !binary {
