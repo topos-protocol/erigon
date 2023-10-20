@@ -1170,6 +1170,10 @@ func (tds *TrieDbState) ReadAccountIncarnation(address libcommon.Address) (uint6
 		return inc, nil
 	}
 	if b, err := tds.db.GetOne(kv.IncarnationMap, address[:]); err == nil {
+		if len(b) == 0 {
+			return 0, nil
+		}
+
 		return binary.BigEndian.Uint64(b), nil
 	} else if errors.Is(err, ethdb.ErrKeyNotFound) {
 		return 0, nil
