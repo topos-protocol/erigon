@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -223,16 +222,18 @@ func Stateless(
 	check(err)
 	defer tx.Rollback()
 
-	batch := memdb.NewMemoryBatch(tx, filepath.Join(statefile, "temp"))
-	defer batch.Rollback()
+	defer tx.Commit()
 
-	defer func() {
-		if err = batch.Commit(); err != nil {
-			fmt.Printf("Failed to commit batch: %v\n", err)
-		}
-	}()
+	// batch := memdb.NewMemoryBatch(tx, filepath.Join(statefile, "temp"))
+	// defer batch.Rollback()
 
-	tds := state.NewTrieDbState(preRoot, batch, blockNum-1)
+	// defer func() {
+	// 	if err = batch.Commit(); err != nil {
+	// 		fmt.Printf("Failed to commit batch: %v\n", err)
+	// 	}
+	// }()
+
+	tds := state.NewTrieDbState(preRoot, tx, blockNum-1)
 	tds.SetResolveReads(false)
 	tds.SetNoHistory(!writeHistory)
 	interrupt := false
@@ -252,8 +253,18 @@ func Stateless(
 	}
 
 	if witnessDatabasePath != "" {
+
+		db, err = createDb(witnessDatabasePath)
+		check(err)
+		defer db.Close()
+
+		w_tx, err := db.BeginRw(context.Background())
+		check(err)
+		defer w_tx.Rollback()
+		defer w_tx.Commit()
+
 		if useStatelessResolver {
-			witnessDBReader = NewWitnessDBReader(batch)
+			witnessDBReader = NewWitnessDBReader(w_tx)
 			// fmt.Printf("Will use the stateless resolver with DB: %s\n", witnessDatabasePath)
 		} else {
 			statsFilePath := fmt.Sprintf("%v.stats.csv", witnessDatabasePath)
@@ -266,7 +277,7 @@ func Stateless(
 			statsFileCsv := csv.NewWriter(file)
 			defer statsFileCsv.Flush()
 
-			witnessDBWriter, err = NewWitnessDBWriter(batch, statsFileCsv)
+			witnessDBWriter, err = NewWitnessDBWriter(w_tx, statsFileCsv)
 			check(err)
 			fmt.Printf("witnesses will be stored to a db at path: %s\n\tstats: %s\n", witnessDatabasePath, statsFilePath)
 		}
@@ -284,6 +295,12 @@ func Stateless(
 			panic(ctx.Err())
 		default:
 		}
+
+		fmt.Printf("Block number: %d, root: %x\n", blockNum-1, preRoot)
+
+		// if blockNum > 6 {
+		// 	return
+		// }
 
 		trace := blockNum == 50492 // false // blockNum == 545080
 		tds.SetResolveReads(blockNum >= witnessThreshold)
@@ -342,6 +359,7 @@ func Stateless(
 				return
 			}
 			if len(resolveWitnesses) > 0 {
+				fmt.Printf("Upserting witnesses for block %d\n", blockNum)
 				witnessDBWriter.MustUpsert(blockNum, uint32(state.MaxTrieCacheSize), resolveWitnesses)
 			}
 		}
@@ -479,15 +497,15 @@ func Stateless(
 			}
 		}
 
-		// willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
+		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		// if batch.BatchSize() >= 100000 || willSnapshot {
-		// 	if err := batch.Commit(); err != nil {
-		// 		fmt.Printf("Failed to commit batch: %v\n", err)
-		// 		return
-		// 	}
-		// 	tds.EvictTries(false)
-		// }
+		if willSnapshot {
+			// if err := batch.Commit(); err != nil {
+			// 	fmt.Printf("Failed to commit batch: %v\n", err)
+			// 	return
+			// }
+			tds.EvictTries(false)
+		}
 
 		// if willSnapshot {
 		// 	// Snapshots of the state will be written to the same directory as the state file
