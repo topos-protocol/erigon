@@ -140,6 +140,7 @@ type CreateDbFunc func(string) (kv.RwDB, error)
 func Stateless(
 	ctx context.Context,
 	blockNum uint64,
+	stopBlock uint64,
 	blockSourceURI string,
 	statefile string,
 	triesize uint32,
@@ -298,6 +299,10 @@ func Stateless(
 		default:
 		}
 
+		if blockNum == stopBlock {
+			break
+		}
+
 		fmt.Printf("Block number: %d, root: %x\n", blockNum-1, preRoot)
 
 		trace := blockNum == 50492 // false // blockNum == 545080
@@ -387,7 +392,7 @@ func Stateless(
 		finalRootFail := false
 		execStart = time.Now()
 
-		fmt.Printf("Block number: %d, witnesses hex: %x\n", blockNum, blockWitness)
+		// fmt.Printf("Block number: %d, witnesses hex: %x\n", blockNum, blockWitness)
 
 		if blockNum >= witnessThreshold && blockWitness != nil { // blockWitness == nil means the extraction fails
 
