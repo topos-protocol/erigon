@@ -502,22 +502,11 @@ func Stateless(
 			}
 		}
 
-		// willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
+		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		// if willSnapshot {
-		// 	// if err := batch.Commit(); err != nil {
-		// 	// 	fmt.Printf("Failed to commit batch: %v\n", err)
-		// 	// 	return
-		// 	// }
-		// 	tds.EvictTries(false)
-		// }
-
-		// if willSnapshot {
-		// 	// Snapshots of the state will be written to the same directory as the state file
-		// 	fmt.Printf("\nSaving snapshot at block %d, hash %x\n", blockNum, block.Root())
-
-		// 	saveSnapshot(stateDb, fmt.Sprintf("%s_%d", statefile, blockNum), createDb)
-		// }
+		if willSnapshot {
+			tds.EvictTries(false)
+		}
 
 		preRoot = header.Root
 		blockNum++
