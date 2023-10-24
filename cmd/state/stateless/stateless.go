@@ -24,6 +24,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/visual"
@@ -156,6 +157,7 @@ func Stateless(
 	witnessDatabasePath string,
 	writeHistory bool,
 ) {
+	ethconfig.EnableStateless = true
 	state.MaxTrieCacheSize = uint64(triesize)
 	startTime := time.Now()
 	sigs := make(chan os.Signal, 1)

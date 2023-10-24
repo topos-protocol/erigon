@@ -210,8 +210,12 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 				}
 			}
 		}
-		// stateWriter = state.NewPlainStateWriter(tx, tx, 0)
-		stateWriter = tds.DbStateWriter()
+
+		if ethconfig.EnableStateless {
+			stateWriter = tds.DbStateWriter()
+		} else {
+			stateWriter = state.NewPlainStateWriter(tx, tx, 0)
+		}
 	}
 
 	if block.Number().Sign() != 0 {
@@ -231,12 +235,6 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 				return nil, statedb, fmt.Errorf("cannot write history: %w", err)
 			}
 		}
-	}
-
-	_, err = tds.ComputeTrieRoots()
-
-	if err != nil {
-		return nil, statedb, err
 	}
 
 	return block, statedb, nil
@@ -603,8 +601,15 @@ func GenesisToBlock(g *types.Genesis, tmpDir string) (*types.Block, *state.Intra
 				statedb.SetIncarnation(addr, state.FirstContractIncarnation)
 			}
 		}
-		if err = statedb.SoftFinalizeTx(&chain.Rules{}, w); err != nil {
-			return
+
+		if ethconfig.EnableStateless {
+			if err = statedb.SoftFinalizeTx(&chain.Rules{}, w); err != nil {
+				return
+			}
+		} else {
+			if err = statedb.FinalizeTx(&chain.Rules{}, w); err != nil {
+				return
+			}
 		}
 		if root, err = trie.CalcRoot("genesis", tx); err != nil {
 			return
