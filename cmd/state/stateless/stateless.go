@@ -298,10 +298,6 @@ func Stateless(
 
 		fmt.Printf("Block number: %d, root: %x\n", blockNum-1, preRoot)
 
-		// if blockNum > 6 {
-		// 	return
-		// }
-
 		trace := blockNum == 50492 // false // blockNum == 545080
 		tds.SetResolveReads(blockNum >= witnessThreshold)
 		block, err := blockProvider.NextBlock()
@@ -373,6 +369,8 @@ func Stateless(
 				fmt.Printf("error extracting witness for block %d: %v\n", blockNum, err)
 				return
 			}
+
+			witnessDBWriter.MustUpsertOneWitness(blockNum, bw)
 
 			var buf bytes.Buffer
 			blockWitnessStats, err = bw.WriteInto(&buf)

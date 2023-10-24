@@ -44,7 +44,7 @@ import (
 )
 
 // MaxTrieCacheSize is the trie cache size limit after which to evict trie nodes from memory.
-var MaxTrieCacheSize = uint64(1024 * 1024)
+var MaxTrieCacheSize = uint64(0)
 
 const (
 	//FirstContractIncarnation - first incarnation for contract accounts. After 1 it increases by 1.
@@ -684,7 +684,10 @@ func (tds *TrieDbState) ResolveStateTrie(extractWitnesses bool, trace bool) ([]*
 			return subTries, nil
 		}
 
-		rl.Rewind()
+		if rl != nil {
+			rl.Rewind()
+		}
+
 		witnesses, err = trie.ExtractWitnesses(subTries, trace, rl)
 		return subTries, err
 	}
@@ -1068,7 +1071,7 @@ func (tds *TrieDbState) ReadAccountStorage(address libcommon.Address, incarnatio
 	enc, ok := tds.t.Get(dbutils.GenerateCompositeTrieKey(addrHash, seckey))
 	if !ok {
 		// Not present in the trie, try database
-		enc, err = tds.db.GetOne(kv.HashedStorage, dbutils.GenerateCompositeStorageKey(addrHash, incarnation, seckey))
+		enc, err = tds.db.GetOne(kv.HashedAccounts, dbutils.GenerateCompositeStorageKey(addrHash, incarnation, seckey))
 		if err != nil {
 			enc = nil
 		}

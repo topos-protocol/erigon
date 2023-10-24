@@ -30,6 +30,31 @@ func NewWitnessDBWriter(storage kv.RwTx, statsWriter *csv.Writer) (*WitnessDBWri
 	return &WitnessDBWriter{storage, statsWriter}, nil
 }
 
+
+func (db *WitnessDBWriter) MustUpsertOneWitness(blockNumber uint64, witness *trie.Witness) {
+	buffer := make([]byte, 8)
+
+	binary.LittleEndian.PutUint64(buffer[:], blockNumber)
+
+	var buf bytes.Buffer
+	_, err := witness.WriteInto(&buf)
+	if err != nil {
+		panic(fmt.Sprintf("error extracting witness for block %d: %v\n", blockNumber, err))
+	}
+	
+	bytes := buf.Bytes()
+
+	batch := db.storage
+
+	err = batch.Put(witnessesBucket, common.CopyBytes(buffer), common.CopyBytes(bytes))
+
+	if err != nil {
+		panic(fmt.Errorf("error while upserting witness: %w", err))
+	}
+}
+
+
+
 func (db *WitnessDBWriter) MustUpsert(blockNumber uint64, maxTrieSize uint32, resolveWitnesses []*trie.Witness) {
 	key := deriveDbKey(blockNumber, maxTrieSize)
 

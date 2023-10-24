@@ -142,9 +142,9 @@ func (dsw *DbStateWriter) WriteAccountStorage(address libcommon.Address, incarna
 
 	v := value.Bytes()
 	if len(v) == 0 {
-		return dsw.db.Delete(kv.HashedStorage, compositeKey)
+		return dsw.db.Delete(kv.HashedAccounts, compositeKey)
 	}
-	return dsw.db.Put(kv.HashedStorage, compositeKey, v)
+	return dsw.db.Put(kv.HashedAccounts, compositeKey, v)
 }
 
 func (dsw *DbStateWriter) CreateContract(address libcommon.Address) error {

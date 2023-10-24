@@ -52,7 +52,6 @@ func ReadAccountByHash(db kv.Tx, addr libcommon.Hash, acc *accounts.Account) (bo
 }
 
 func WriteAccount(db kv.RwTx, addrHash libcommon.Hash, acc accounts.Account) error {
-	//fmt.Printf("WriteAccount: %x %x\n", addrHash, acc.Root)
 	addrHashBytes := addrHash[:]
 	value := make([]byte, acc.EncodingLengthForStorage())
 	acc.EncodeForStorage(value)

@@ -722,7 +722,7 @@ func storageUsage() {
 	count := 0
 	var leafSize uint64
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		c, err := tx.Cursor(kv.HashedStorage)
+		c, err := tx.Cursor(kv.HashedAccounts)
 		if err != nil {
 			return err
 		}
@@ -734,7 +734,7 @@ func storageUsage() {
 			copy(addr[:], k[:20])
 			del, ok := deleted[addr]
 			if !ok {
-				vv, err := tx.GetOne(kv.HashedStorage, crypto.Keccak256(addr[:]))
+				vv, err := tx.GetOne(kv.HashedAccounts, crypto.Keccak256(addr[:]))
 				if err != nil {
 					return err
 				}
@@ -838,7 +838,7 @@ func tokenUsage() {
 	//itemsByCreator := make(map[libcommon.Address]int)
 	count := 0
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		c, err := tx.Cursor(kv.HashedStorage)
+		c, err := tx.Cursor(kv.HashedAccounts)
 
 		if err != nil {
 			return err
@@ -918,7 +918,7 @@ func nonTokenUsage() {
 	//itemsByCreator := make(map[libcommon.Address]int)
 	count := 0
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
-		c, err := tx.Cursor(kv.HashedStorage)
+		c, err := tx.Cursor(kv.HashedAccounts)
 
 		if err != nil {
 			return err
