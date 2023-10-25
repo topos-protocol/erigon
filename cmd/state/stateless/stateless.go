@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -194,17 +196,31 @@ func Stateless(
 	check(err)
 	defer db.Close()
 
+	genBytes, err := os.ReadFile("/home/john/code/jerrigon/test-genesis.json")
+	if err != nil {
+		check(err)
+	}
+	var genesis = new(types.Genesis)
+	err = json.Unmarshal(genBytes, genesis)
+	if err != nil {
+		check(err)
+	}
+	chainConfig := genesis.Config
+
 	var preRoot common.Hash
 	if blockNum == 1 {
-		genesis := core.DeveloperGenesisBlock(5, core.DevnetEtherbase)
-		_, genesisBlock, err := core.CommitGenesisBlock(db, genesis, "", log.New())
+		var gb *types.Block
+		// genesis = core.DeveloperGenesisBlock(5, core.DevnetEtherbase)
+		chainConfig, gb, err = core.CommitGenesisBlock(db, genesis, "", log.New())
 		check(err)
-		preRoot = genesisBlock.Header().Root
+		preRoot = gb.Header().Root
 	}
 
-	chainConfig := params.AllCliqueProtocolChanges
+	// chainConfig = params.AllCliqueProtocolChanges
 	vmConfig := vm.Config{}
 	engine := clique.New(chainConfig, params.CliqueSnapshot, memdb.New(""), log.New())
+
+	fmt.Printf("extra data %s\n", hex.EncodeToString(genesis.ExtraData))
 
 	if blockNum > 1 {
 		if errBc := blockProvider.FastFwd(blockNum - 1); errBc != nil {
@@ -217,6 +233,8 @@ func Stateless(
 		preRoot = block.Root()
 	}
 
+	fmt.Printf("Preroot %s\n", preRoot.String())
+
 	tx, err := db.BeginRw(context.Background())
 
 	check(err)
@@ -224,16 +242,8 @@ func Stateless(
 
 	defer tx.Commit()
 
-	// batch := memdb.NewMemoryBatch(tx, filepath.Join(statefile, "temp"))
-	// defer batch.Rollback()
-
-	// defer func() {
-	// 	if err = batch.Commit(); err != nil {
-	// 		fmt.Printf("Failed to commit batch: %v\n", err)
-	// 	}
-	// }()
-
 	tds := state.NewTrieDbState(preRoot, tx, blockNum-1)
+
 	tds.SetResolveReads(false)
 	tds.SetNoHistory(!writeHistory)
 	interrupt := false
@@ -320,6 +330,8 @@ func Stateless(
 			return
 		}
 
+		fmt.Printf("current block number=%d hash=%s root=%s\n", block.Number().Uint64(), block.Hash().String(), block.Header().Root.String())
+
 		getHeader := func(hash common.Hash, number uint64) *types.Header {
 			h, _ := blockProvider.Header(number, hash)
 			return h
@@ -336,9 +348,11 @@ func Stateless(
 			receipts = append(receipts, receipt)
 		}
 
-		if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
-			fmt.Printf("Finalize of block %d failed: %v\n", blockNum, err)
-			return
+		if blockNum > 1 {
+			if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
+				fmt.Printf("Finalize of block %d failed: %v\n", blockNum, err)
+				return
+			}
 		}
 
 		if witnessDBReader != nil {
@@ -385,7 +399,8 @@ func Stateless(
 		finalRootFail := false
 		execStart = time.Now()
 
-		fmt.Printf("Block number: %d, witnesses hex: %x\n", blockNum, blockWitness)
+		// fmt.Printf("Block number: %d, witnesses hex: %x\n", blockNum, blockWitness)
+		fmt.Printf("Block number: %d, witnesses hex: removed\n", blockNum)
 
 		if blockNum >= witnessThreshold && blockWitness != nil { // blockWitness == nil means the extraction fails
 
