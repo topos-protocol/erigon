@@ -336,8 +336,11 @@ func Stateless(
 			return
 		}
 
-		balance := statedb.GetBalance(common.HexToAddress("0x85da99c8a7c2c95964c8efd687e95e632fc533d6"))
-		fmt.Printf("%d\n", balance)
+		// When a block is empty, nothing will be read from statedb in some consensus, e.g. clique.
+		// The trie remains empty in memory, so it will yield a wrong root hash. Reading an arbitrary account from statedb will populate trie and make everything right.
+		if len(block.Transactions()) == 0 {
+			statedb.GetBalance(common.HexToAddress("0x1234"))
+		}
 
 		fmt.Printf("current block number=%d hash=%s root=%s\n", block.Number().Uint64(), block.Hash().String(), block.Header().Root.String())
 
@@ -357,11 +360,9 @@ func Stateless(
 			receipts = append(receipts, receipt)
 		}
 
-		if blockNum > 1 {
-			if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
-				fmt.Printf("Finalize of block %d failed: %v\n", blockNum, err)
-				return
-			}
+		if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
+			fmt.Printf("Finalize of block %d failed: %v\n", blockNum, err)
+			return
 		}
 
 		if witnessDBReader != nil {
@@ -408,7 +409,7 @@ func Stateless(
 		finalRootFail := false
 		execStart = time.Now()
 
-		fmt.Printf("Block number: %d, witnesses hex: removed\n", blockNum)
+		// fmt.Printf("Block number: %d, witnesses hex: %x\n", blockNum, blockWitness)
 
 		if blockNum >= witnessThreshold && blockWitness != nil { // blockWitness == nil means the extraction fails
 
