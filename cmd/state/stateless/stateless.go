@@ -159,6 +159,7 @@ func Stateless(
 	useStatelessResolver bool,
 	witnessDatabasePath string,
 	writeHistory bool,
+	genesisFile string,
 ) {
 	ethconfig.EnableStateless = true
 	state.MaxTrieCacheSize = uint64(triesize)
@@ -199,33 +200,26 @@ func Stateless(
 	check(err)
 	defer db.Close()
 
-	genBytes, err := os.ReadFile("/home/john/code/jerrigon/test-genesis.json")
-	if err != nil {
-		check(err)
-	}
-	var genesis = new(types.Genesis)
-	err = json.Unmarshal(genBytes, genesis)
-	if err != nil {
-		check(err)
+	var genesis = core.DeveloperGenesisBlock(5, core.DevnetEtherbase)
+	if genesisFile != "" {
+		genBytes, err := os.ReadFile(genesisFile)
+		if err != nil {
+			check(err)
+		}
+		err = json.Unmarshal(genBytes, genesis)
+		if err != nil {
+			check(err)
+		}
 	}
 	chainConfig := genesis.Config
 
 	var preRoot common.Hash
 	if blockNum == 1 {
 		var gb *types.Block
-		// genesis = core.DeveloperGenesisBlock(5, core.DevnetEtherbase)
 		chainConfig, gb, err = core.CommitGenesisBlock(db, genesis, "", log.New())
 		check(err)
 		preRoot = gb.Header().Root
-	}
-
-	// chainConfig = params.AllCliqueProtocolChanges
-	vmConfig := vm.Config{}
-	engine := clique.New(chainConfig, params.CliqueSnapshot, memdb.New(""), log.New())
-
-	fmt.Printf("extra data %s\n", hex.EncodeToString(genesis.ExtraData))
-
-	if blockNum > 1 {
+	} else if blockNum > 1 {
 		if errBc := blockProvider.FastFwd(blockNum - 1); errBc != nil {
 			check(errBc)
 		}
@@ -235,6 +229,11 @@ func Stateless(
 		fmt.Printf("Block root hash: %x\n", block.Root())
 		preRoot = block.Root()
 	}
+
+	vmConfig := vm.Config{}
+	engine := clique.New(chainConfig, params.CliqueSnapshot, memdb.New(""), log.New())
+
+	fmt.Printf("extra data %s\n", hex.EncodeToString(genesis.ExtraData))
 
 	fmt.Printf("Preroot %s\n", preRoot.String())
 
@@ -337,6 +336,9 @@ func Stateless(
 			return
 		}
 
+		balance := statedb.GetBalance(common.HexToAddress("0x85da99c8a7c2c95964c8efd687e95e632fc533d6"))
+		fmt.Printf("%d\n", balance)
+
 		fmt.Printf("current block number=%d hash=%s root=%s\n", block.Number().Uint64(), block.Hash().String(), block.Header().Root.String())
 
 		getHeader := func(hash common.Hash, number uint64) *types.Header {
@@ -405,7 +407,7 @@ func Stateless(
 		}
 		finalRootFail := false
 		execStart = time.Now()
-		
+
 		fmt.Printf("Block number: %d, witnesses hex: removed\n", blockNum)
 
 		if blockNum >= witnessThreshold && blockWitness != nil { // blockWitness == nil means the extraction fails
