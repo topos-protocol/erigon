@@ -2,6 +2,8 @@ package jsonrpc
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"time"
@@ -9,6 +11,7 @@ import (
 	"github.com/holiman/uint256"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
@@ -162,6 +165,31 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		}
 		stream.Flush()
 	}
+
+	if *config.Tracer == "zeroTracer" {
+		stream.WriteMore()
+		stream.WriteObjectStart()
+		stream.WriteObjectField("block_witness")
+
+		k := make([]byte, 8)
+
+		binary.LittleEndian.PutUint64(k[:], block.NumberU64())
+
+		witness_bytes, err := tx.GetOne(kv.Witnesses, k)
+
+		if err != nil {
+			log.Warn("error while reading witness from db", "err", err)
+			stream.WriteNil()
+			return err
+		}
+
+		stream.WriteString(hex.EncodeToString(witness_bytes))
+
+		stream.WriteObjectEnd()
+
+		stream.Flush()
+	}
+
 	stream.WriteArrayEnd()
 	stream.Flush()
 	return nil

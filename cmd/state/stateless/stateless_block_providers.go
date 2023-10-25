@@ -37,6 +37,7 @@ type BlockProvider interface {
 	FastFwd(uint64) error
 	NextBlock() (*types.Block, error)
 	Header(blockNum uint64, blockHash common.Hash) (*types.Header, error)
+	DB() kv.RwDB
 }
 
 func BlockProviderForURI(uri string, createDBFunc CreateDbFunc) (BlockProvider, error) {
@@ -90,6 +91,10 @@ func NewBlockProviderFromDB(path string, createDBFunc CreateDbFunc) (BlockProvid
 	}, nil
 }
 
+func (p *BlockChainBlockProvider) DB() kv.RwDB {
+	return p.db
+}
+
 func (p *BlockChainBlockProvider) Close() error {
 	p.db.Close()
 	return nil
@@ -101,7 +106,7 @@ func (p *BlockChainBlockProvider) FastFwd(to uint64) error {
 }
 
 func (p *BlockChainBlockProvider) NextBlock() (*types.Block, error) {
-	tx, err := p.db.BeginRo(context.Background())
+	tx, err := p.db.BeginRw(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +176,10 @@ func getTempFileName() string {
 	tmpfile.Close()
 	fmt.Printf("creating a temp headers db @ %s\n", tmpfile.Name())
 	return tmpfile.Name()
+}
+
+func (p *ExportFileBlockProvider) DB() kv.RwDB {
+	return p.headersDB
 }
 
 func (p *ExportFileBlockProvider) Close() error {

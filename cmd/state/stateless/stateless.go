@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -265,18 +266,21 @@ func Stateless(
 	}
 
 	if witnessDatabasePath != "" {
+		var db kv.RwDB
 
-		db, err = createDb(witnessDatabasePath)
+		uri, err := url.Parse(blockSourceURI)
 		check(err)
-		defer db.Close()
 
-		w_tx, err := db.BeginRw(context.Background())
-		check(err)
-		defer w_tx.Rollback()
-		defer w_tx.Commit()
+		if witnessDatabasePath == uri.Path {
+			db = blockProvider.DB()
+		} else {
+			db, err = createDb(witnessDatabasePath)
+			check(err)
+			defer db.Close()
+		}
 
 		if useStatelessResolver {
-			witnessDBReader = NewWitnessDBReader(w_tx)
+			witnessDBReader = NewWitnessDBReader(db)
 			// fmt.Printf("Will use the stateless resolver with DB: %s\n", witnessDatabasePath)
 		} else {
 			statsFilePath := fmt.Sprintf("%v.stats.csv", witnessDatabasePath)
@@ -289,7 +293,7 @@ func Stateless(
 			statsFileCsv := csv.NewWriter(file)
 			defer statsFileCsv.Flush()
 
-			witnessDBWriter, err = NewWitnessDBWriter(w_tx, statsFileCsv)
+			witnessDBWriter, err = NewWitnessDBWriter(db, statsFileCsv)
 			check(err)
 			fmt.Printf("witnesses will be stored to a db at path: %s\n\tstats: %s\n", witnessDatabasePath, statsFilePath)
 		}

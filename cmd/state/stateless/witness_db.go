@@ -2,6 +2,7 @@ package stateless
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/csv"
 	"fmt"
@@ -11,16 +12,12 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/trie"
 )
 
-var (
-	witnessesBucket = "witnesses"
-)
-
 type WitnessDBWriter struct {
-	storage     kv.RwTx
+	storage     kv.RwDB
 	statsWriter *csv.Writer
 }
 
-func NewWitnessDBWriter(storage kv.RwTx, statsWriter *csv.Writer) (*WitnessDBWriter, error) {
+func NewWitnessDBWriter(storage kv.RwDB, statsWriter *csv.Writer) (*WitnessDBWriter, error) {
 	err := statsWriter.Write([]string{
 		"blockNum", "maxTrieSize", "witnessesSize",
 	})
@@ -30,30 +27,34 @@ func NewWitnessDBWriter(storage kv.RwTx, statsWriter *csv.Writer) (*WitnessDBWri
 	return &WitnessDBWriter{storage, statsWriter}, nil
 }
 
-
 func (db *WitnessDBWriter) MustUpsertOneWitness(blockNumber uint64, witness *trie.Witness) {
-	buffer := make([]byte, 8)
+	k := make([]byte, 8)
 
-	binary.LittleEndian.PutUint64(buffer[:], blockNumber)
+	binary.LittleEndian.PutUint64(k[:], blockNumber)
 
 	var buf bytes.Buffer
 	_, err := witness.WriteInto(&buf)
 	if err != nil {
 		panic(fmt.Sprintf("error extracting witness for block %d: %v\n", blockNumber, err))
 	}
-	
+
 	bytes := buf.Bytes()
 
-	batch := db.storage
+	tx, err := db.storage.BeginRw(context.Background())
+	if err != nil {
+		panic(fmt.Errorf("error opening tx: %w", err))
+	}
 
-	err = batch.Put(witnessesBucket, common.CopyBytes(buffer), common.CopyBytes(bytes))
+	defer tx.Rollback()
+
+	err = tx.Put(kv.Witnesses, k, common.CopyBytes(bytes))
+
+	tx.Commit()
 
 	if err != nil {
 		panic(fmt.Errorf("error while upserting witness: %w", err))
 	}
 }
-
-
 
 func (db *WitnessDBWriter) MustUpsert(blockNumber uint64, maxTrieSize uint32, resolveWitnesses []*trie.Witness) {
 	key := deriveDbKey(blockNumber, maxTrieSize)
@@ -71,9 +72,16 @@ func (db *WitnessDBWriter) MustUpsert(blockNumber uint64, maxTrieSize uint32, re
 
 	bytes := buf.Bytes()
 
-	batch := db.storage
+	tx, err := db.storage.BeginRw(context.Background())
+	if err != nil {
+		panic(fmt.Errorf("error opening tx: %w", err))
+	}
 
-	err := batch.Put(witnessesBucket, common.CopyBytes(key), common.CopyBytes(bytes))
+	defer tx.Rollback()
+
+	err = tx.Put(kv.Witnesses, common.CopyBytes(key), common.CopyBytes(bytes))
+
+	tx.Commit()
 
 	if err != nil {
 		panic(fmt.Errorf("error while upserting witness: %w", err))
@@ -93,16 +101,24 @@ func (db *WitnessDBWriter) MustUpsert(blockNumber uint64, maxTrieSize uint32, re
 }
 
 type WitnessDBReader struct {
-	getter kv.Getter
+	db kv.RwDB
 }
 
-func NewWitnessDBReader(getter kv.Getter) *WitnessDBReader {
-	return &WitnessDBReader{getter}
+func NewWitnessDBReader(db kv.RwDB) *WitnessDBReader {
+	return &WitnessDBReader{db}
 }
 
 func (db *WitnessDBReader) GetWitnessesForBlock(blockNumber uint64, maxTrieSize uint32) ([]byte, error) {
 	key := deriveDbKey(blockNumber, maxTrieSize)
-	return db.getter.GetOne(witnessesBucket, key)
+
+	tx, err := db.db.BeginRo(context.Background())
+	if err != nil {
+		panic(fmt.Errorf("error opening tx: %w", err))
+	}
+
+	defer tx.Rollback()
+
+	return tx.GetOne(kv.Witnesses, key)
 }
 
 func deriveDbKey(blockNumber uint64, maxTrieSize uint32) []byte {
