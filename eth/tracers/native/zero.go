@@ -84,7 +84,7 @@ func (t *zeroTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, sco
 		t.addSLOADToAccount(caller, slot)
 	case stackLen >= 1 && op == vm.SSTORE:
 		slot := libcommon.Hash(stackData[stackLen-1].Bytes32())
-		t.addSSTOREToAccount(caller, slot)
+		t.addSSTOREToAccount(caller, slot, stackData[stackLen-2].Clone())
 	case stackLen >= 1 && (op == vm.EXTCODECOPY || op == vm.EXTCODEHASH || op == vm.EXTCODESIZE || op == vm.BALANCE || op == vm.SELFDESTRUCT):
 		addr := libcommon.Address(stackData[stackLen-1].Bytes20())
 		t.addAccountToTrace(addr, false)
@@ -185,8 +185,6 @@ func (t *zeroTracer) addSLOADToAccount(addr libcommon.Address, key libcommon.Has
 	t.tx.Trace[addr].ReadStorage[key] = &value
 }
 
-func (t *zeroTracer) addSSTOREToAccount(addr libcommon.Address, key libcommon.Hash) {
-	var value uint256.Int
-	t.env.IntraBlockState().GetState(addr, &key, &value)
-	t.tx.Trace[addr].WriteStorage[key] = &value
+func (t *zeroTracer) addSSTOREToAccount(addr libcommon.Address, key libcommon.Hash, value *uint256.Int) {
+	t.tx.Trace[addr].WriteStorage[key] = value
 }
