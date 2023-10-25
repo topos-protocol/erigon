@@ -996,6 +996,7 @@ func (t *Trie) deleteRecursive(origNode node, key []byte, keyStart int, preserve
 		updated, nn = t.deleteRecursive(child, key, keyStart+1, preserveAccountNode, incarnation)
 		if !updated {
 			newNode = n
+			t.observers.BranchNodeTouched(key[:keyStart])
 		} else {
 			t.evictNodeFromHashMap(n)
 			n.Children[key[keyStart]] = nn

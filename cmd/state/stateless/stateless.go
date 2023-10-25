@@ -26,6 +26,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
+	"github.com/ledgerwatch/erigon/eth/ethconfig"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/visual"
@@ -141,6 +142,7 @@ type CreateDbFunc func(string) (kv.RwDB, error)
 func Stateless(
 	ctx context.Context,
 	blockNum uint64,
+	stopBlock uint64,
 	blockSourceURI string,
 	statefile string,
 	triesize uint32,
@@ -158,6 +160,7 @@ func Stateless(
 	witnessDatabasePath string,
 	writeHistory bool,
 ) {
+	ethconfig.EnableStateless = true
 	state.MaxTrieCacheSize = uint64(triesize)
 	startTime := time.Now()
 	sigs := make(chan os.Signal, 1)
@@ -306,6 +309,10 @@ func Stateless(
 		default:
 		}
 
+		if blockNum == stopBlock {
+			break
+		}
+
 		fmt.Printf("Block number: %d, root: %x\n", blockNum-1, preRoot)
 
 		trace := blockNum == 50492 // false // blockNum == 545080
@@ -398,8 +405,7 @@ func Stateless(
 		}
 		finalRootFail := false
 		execStart = time.Now()
-
-		// fmt.Printf("Block number: %d, witnesses hex: %x\n", blockNum, blockWitness)
+		
 		fmt.Printf("Block number: %d, witnesses hex: removed\n", blockNum)
 
 		if blockNum >= witnessThreshold && blockWitness != nil { // blockWitness == nil means the extraction fails
@@ -510,22 +516,11 @@ func Stateless(
 			}
 		}
 
-		// willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
+		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		// if willSnapshot {
-		// 	// if err := batch.Commit(); err != nil {
-		// 	// 	fmt.Printf("Failed to commit batch: %v\n", err)
-		// 	// 	return
-		// 	// }
-		// 	tds.EvictTries(false)
-		// }
-
-		// if willSnapshot {
-		// 	// Snapshots of the state will be written to the same directory as the state file
-		// 	fmt.Printf("\nSaving snapshot at block %d, hash %x\n", blockNum, block.Root())
-
-		// 	saveSnapshot(stateDb, fmt.Sprintf("%s_%d", statefile, blockNum), createDb)
-		// }
+		if willSnapshot {
+			tds.EvictTries(false)
+		}
 
 		preRoot = header.Root
 		blockNum++

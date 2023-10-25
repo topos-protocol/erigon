@@ -44,7 +44,7 @@ import (
 )
 
 // MaxTrieCacheSize is the trie cache size limit after which to evict trie nodes from memory.
-var MaxTrieCacheSize = uint64(0)
+var MaxTrieCacheSize = uint64(1024 * 1024)
 
 const (
 	//FirstContractIncarnation - first incarnation for contract accounts. After 1 it increases by 1.
