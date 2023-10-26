@@ -378,7 +378,7 @@ func Stateless(
 			}
 		} else {
 			var resolveWitnesses []*trie.Witness
-			if resolveWitnesses, err = tds.ResolveStateTrie(witnessDBWriter != nil, false); err != nil {
+			if resolveWitnesses, err = tds.ResolveStateTrie(false, false); err != nil {
 				fmt.Printf("Failed to resolve state trie: %v\n", err)
 				return
 			}
@@ -523,11 +523,11 @@ func Stateless(
 			}
 		}
 
-		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
+		// willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		if willSnapshot {
-			tds.EvictTries(false)
-		}
+		// if willSnapshot {
+		// 	tds.EvictTries(false)
+		// }
 
 		preRoot = header.Root
 		blockNum++
