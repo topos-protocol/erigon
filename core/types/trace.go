@@ -4,43 +4,50 @@ package types
 import (
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 )
 
+type HexBytes []byte
+
+func (b HexBytes) MarshalText() ([]byte, error) {
+	return hexutility.Bytes(b[:]).MarshalText()
+}
+
 type ContractCodeUsage struct {
-	Read  libcommon.Hash
-	Write []byte
+	Read  *libcommon.Hash `json:"read,omitempty"`
+	Write HexBytes        `json:"write,omitempty"`
 }
 
 type TxnTrace struct {
-	Balance        *uint256.Int
-	Nonce          *uint64
-	StorageRead    []libcommon.Hash
-	StorageWritten map[libcommon.Hash]uint256.Int
-	CodeUsage      ContractCodeUsage
+	Balance        *uint256.Int                    `json:"balance,omitempty"`
+	Nonce          *uint64                         `json:"nonce,omitempty"`
+	StorageRead    []libcommon.Hash                `json:"storage_read,omitempty"`
+	StorageWritten map[libcommon.Hash]*uint256.Int `json:"storage_written,omitempty"`
+	CodeUsage      *ContractCodeUsage              `json:"code_usage,omitempty"`
+	StorageReadMap map[libcommon.Hash]struct{}     `json:"-"`
 }
 
 type TxnMeta struct {
-	ByteCode           []byte
-	NewTxnTrieNode     []byte
-	NewReceiptTrieNode []byte
-	GasUsed            uint64
-	Bloom              Bloom
+	ByteCode           HexBytes `json:"byte_code,omitempty"`
+	NewTxnTrieNode     HexBytes `json:"new_txn_trie_node_byte,omitempty"`
+	NewReceiptTrieNode HexBytes `json:"new_receipt_trie_node_byte,omitempty"`
+	GasUsed            uint64   `json:"gas_used,omitempty"`
+	Bloom              Bloom    `json:"bloom,omitempty"`
 }
 
 type TxnInfo struct {
-	Traces map[libcommon.Address]TxnTrace
-	Meta   TxnMeta
+	Traces map[libcommon.Address]*TxnTrace `json:"traces,omitempty"`
+	Meta   TxnMeta                         `json:"meta,omitempty"`
 }
 
 type BlockUsedCodeHashes []libcommon.Hash
 
-type TriePreImage []byte
+type TriePreImage HexBytes
 
 type StorageTriesPreImage map[libcommon.Address]TriePreImage
 
 type BlockTrace struct {
-	StateTrie    TriePreImage
-	StorageTries StorageTriesPreImage
-	ContractCode BlockUsedCodeHashes
-	TxnInfo      TxnInfo
+	StateTrie    TriePreImage         `json:"state_trie,omitempty"`
+	StorageTries StorageTriesPreImage `json:"storage_tries,omitempty"`
+	TxnInfo      []TxnInfo            `json:"txn_info,omitempty"`
 }

@@ -1,15 +1,17 @@
 package native
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"sync/atomic"
 
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/eth/tracers"
@@ -22,32 +24,19 @@ func init() {
 	register("zeroTracer", newZeroTracer)
 }
 
-type Account struct {
-	Balance      *uint256.Int                    `json:"balance,omitempty"`
-	Nonce        uint64                          `json:"nonce,omitempty"`
-	ReadStorage  map[libcommon.Hash]*uint256.Int `json:"storage_read,omitempty"`
-	WriteStorage map[libcommon.Hash]*uint256.Int `json:"storage_write,omitempty"`
-	CodeUsage    string                          `json:"code_usage,omitempty"`
-}
-
-type TX struct {
-	ByteCode string                         `json:"byte_code,omitempty"` // TX CallData
-	GasUsed  uint64                         `json:"gas_used,omitempty"`
-	Trace    map[libcommon.Address]*Account `json:"trace,omitempty"`
-}
-
 type zeroTracer struct {
 	noopTracer // stub struct to mock not used interface methods
 	env        vm.VMInterface
-	tx         TX
+	tx         types.TxnInfo
+	gasLimit   uint64      // Amount of gas bought for the whole tx
 	interrupt  atomic.Bool // Atomic flag to signal execution interruption
 	reason     error       // Textual reason for the interruption
 }
 
 func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, error) {
 	return &zeroTracer{
-		tx: TX{
-			Trace: make(map[libcommon.Address]*Account),
+		tx: types.TxnInfo{
+			Traces: make(map[libcommon.Address]*types.TxnTrace),
 		},
 	}, nil
 }
@@ -55,11 +44,30 @@ func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, e
 // CaptureStart implements the EVMLogger interface to initialize the tracing operation.
 func (t *zeroTracer) CaptureStart(env vm.VMInterface, from libcommon.Address, to libcommon.Address, precompile, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) {
 	t.env = env
-	t.tx.ByteCode = common.Bytes2Hex(input)
+	t.tx.Meta.ByteCode = input
 
 	t.addAccountToTrace(from, false)
 	t.addAccountToTrace(to, false)
 	t.addAccountToTrace(env.Context().Coinbase, false)
+
+	// The recipient balance includes the value transferred.
+	toBal := new(big.Int).Sub(t.tx.Traces[to].Balance.ToBig(), value.ToBig())
+	t.tx.Traces[to].Balance = uint256.MustFromBig(toBal)
+
+	// The sender balance is after reducing: value and gasLimit.
+	// We need to re-add them to get the pre-tx balance.
+	fromBal := new(big.Int).Set(t.tx.Traces[from].Balance.ToBig())
+	gasPrice := env.TxContext().GasPrice
+	consumedGas := new(big.Int).Mul(gasPrice.ToBig(), new(big.Int).SetUint64(t.gasLimit))
+	fromBal.Add(fromBal, new(big.Int).Add(value.ToBig(), consumedGas))
+	t.tx.Traces[from].Balance = uint256.MustFromBig(fromBal)
+	if *t.tx.Traces[from].Nonce > uint64(0) {
+		*t.tx.Traces[from].Nonce--
+	}
+}
+
+func (t *zeroTracer) CaptureTxStart(gasLimit uint64) {
+	t.gasLimit = gasLimit
 }
 
 // CaptureState implements the EVMLogger interface to trace a single step of VM execution.
@@ -135,7 +143,69 @@ func GetMemoryCopyPadded(m *vm.Memory, offset, size int64) ([]byte, error) {
 }
 
 func (t *zeroTracer) CaptureEnd(output []byte, gasUsed uint64, err error) {
-	t.tx.GasUsed = gasUsed
+	t.tx.Meta.GasUsed = gasUsed
+
+	toPop := make([]libcommon.Address, 0)
+
+	for addr := range t.tx.Traces {
+		trace := t.tx.Traces[addr]
+		newBalance := t.env.IntraBlockState().GetBalance(addr)
+		newNonce := t.env.IntraBlockState().GetNonce(addr)
+		codeHash := t.env.IntraBlockState().GetCodeHash(addr)
+		code := t.env.IntraBlockState().GetCode(addr)
+
+		changed := false
+
+		if newBalance.Cmp(trace.Balance) != 0 {
+			trace.Balance = newBalance
+			changed = true
+		} else {
+			trace.Balance = nil
+		}
+
+		if newNonce != *trace.Nonce {
+			trace.Nonce = &newNonce
+			changed = true
+		} else {
+			trace.Nonce = nil
+		}
+
+		if len(trace.StorageReadMap) > 0 {
+			trace.StorageRead = make([]libcommon.Hash, 0, len(trace.StorageReadMap))
+			for k := range trace.StorageReadMap {
+				trace.StorageRead = append(trace.StorageRead, k)
+			}
+			changed = true
+		} else {
+			trace.StorageRead = nil
+		}
+
+		if len(trace.StorageWritten) == 0 {
+			trace.StorageWritten = nil
+		} else {
+			changed = true
+		}
+
+		if !bytes.Equal(codeHash[:], trace.CodeUsage.Read[:]) {
+			trace.CodeUsage.Read = nil
+			trace.CodeUsage.Write = code
+			changed = true
+		} else if code != nil {
+			trace.CodeUsage.Read = &codeHash
+		}
+
+		if trace.CodeUsage.Read != nil && code == nil {
+			trace.CodeUsage = nil
+		}
+
+		if !changed {
+			toPop = append(toPop, addr)
+		}
+	}
+
+	for _, addr := range toPop {
+		delete(t.tx.Traces, addr)
+	}
 }
 
 // GetResult returns the json-encoded nested list of call traces, and any
@@ -152,6 +222,10 @@ func (t *zeroTracer) GetResult() (json.RawMessage, error) {
 	return json.RawMessage(res), t.reason
 }
 
+func (t *zeroTracer) GetTxnInfo() types.TxnInfo {
+	return t.tx
+}
+
 // Stop terminates execution of the tracer at the first opportune moment.
 func (t *zeroTracer) Stop(err error) {
 	t.reason = err
@@ -159,32 +233,29 @@ func (t *zeroTracer) Stop(err error) {
 }
 
 func (t *zeroTracer) addAccountToTrace(addr libcommon.Address, created bool) {
-	if _, ok := t.tx.Trace[addr]; ok {
+	if _, ok := t.tx.Traces[addr]; ok {
 		return
 	}
 
-	var code string
-	if created {
-		code = common.Bytes2Hex(t.env.IntraBlockState().GetCode(addr))
-	} else {
-		code = libcommon.Hash.String(t.env.IntraBlockState().GetCodeHash(addr))
-	}
+	nonce := t.env.IntraBlockState().GetNonce(addr)
+	codeHash := t.env.IntraBlockState().GetCodeHash(addr)
 
-	t.tx.Trace[addr] = &Account{
-		Balance:      t.env.IntraBlockState().GetBalance(addr),
-		Nonce:        t.env.IntraBlockState().GetNonce(addr),
-		CodeUsage:    code,
-		WriteStorage: make(map[libcommon.Hash]*uint256.Int),
-		ReadStorage:  make(map[libcommon.Hash]*uint256.Int),
+	t.tx.Traces[addr] = &types.TxnTrace{
+		Balance:        t.env.IntraBlockState().GetBalance(addr),
+		Nonce:          &nonce,
+		CodeUsage:      &types.ContractCodeUsage{Read: &codeHash},
+		StorageWritten: make(map[libcommon.Hash]*uint256.Int),
+		StorageRead:    make([]libcommon.Hash, 0),
+		StorageReadMap: make(map[libcommon.Hash]struct{}),
 	}
 }
 
 func (t *zeroTracer) addSLOADToAccount(addr libcommon.Address, key libcommon.Hash) {
 	var value uint256.Int
 	t.env.IntraBlockState().GetState(addr, &key, &value)
-	t.tx.Trace[addr].ReadStorage[key] = &value
+	t.tx.Traces[addr].StorageReadMap[key] = struct{}{}
 }
 
 func (t *zeroTracer) addSSTOREToAccount(addr libcommon.Address, key libcommon.Hash, value *uint256.Int) {
-	t.tx.Trace[addr].WriteStorage[key] = value
+	t.tx.Traces[addr].StorageWritten[key] = value
 }
