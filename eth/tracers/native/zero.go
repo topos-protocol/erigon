@@ -31,6 +31,9 @@ type zeroTracer struct {
 	gasLimit   uint64      // Amount of gas bought for the whole tx
 	interrupt  atomic.Bool // Atomic flag to signal execution interruption
 	reason     error       // Textual reason for the interruption
+	ctx        *tracers.Context
+	to         *libcommon.Address
+	txStatus   uint64
 }
 
 func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, error) {
@@ -38,11 +41,13 @@ func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, e
 		tx: types.TxnInfo{
 			Traces: make(map[libcommon.Address]*types.TxnTrace),
 		},
+		ctx: ctx,
 	}, nil
 }
 
 // CaptureStart implements the EVMLogger interface to initialize the tracing operation.
 func (t *zeroTracer) CaptureStart(env vm.VMInterface, from libcommon.Address, to libcommon.Address, precompile, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) {
+	t.to = &to
 	t.env = env
 	t.tx.Meta.ByteCode = input
 
@@ -142,8 +147,9 @@ func GetMemoryCopyPadded(m *vm.Memory, offset, size int64) ([]byte, error) {
 	return cpy, nil
 }
 
-func (t *zeroTracer) CaptureEnd(output []byte, gasUsed uint64, err error) {
-	t.tx.Meta.GasUsed = gasUsed
+func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
+	t.tx.Meta.GasUsed = t.gasLimit - restGas
+	*t.ctx.CumulativeGasUsed += t.tx.Meta.GasUsed
 
 	toPop := make([]libcommon.Address, 0)
 
@@ -205,6 +211,49 @@ func (t *zeroTracer) CaptureEnd(output []byte, gasUsed uint64, err error) {
 
 	for _, addr := range toPop {
 		delete(t.tx.Traces, addr)
+	}
+
+	receipt := &types.Receipt{Type: t.ctx.Txn.Type(), CumulativeGasUsed: *t.ctx.CumulativeGasUsed}
+	receipt.Status = t.txStatus
+	receipt.TxHash = t.ctx.Txn.Hash()
+	receipt.GasUsed = t.tx.Meta.GasUsed
+
+	// if the transaction created a contract, store the creation address in the receipt.
+	if t.to == nil {
+		receipt.ContractAddress = crypto.CreateAddress(t.env.TxContext().Origin, t.ctx.Txn.GetNonce())
+	}
+	// Set the receipt logs and create a bloom for filtering
+	receipt.Logs = t.env.IntraBlockState().GetLogs(t.ctx.Txn.Hash())
+	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
+	receipt.BlockNumber = big.NewInt(0).SetUint64(t.ctx.BlockNum)
+	receipt.TransactionIndex = uint(t.ctx.TxIndex)
+
+	receiptBuffer := &bytes.Buffer{}
+	encodeErr := receipt.EncodeRLP(receiptBuffer)
+
+	if encodeErr != nil {
+		log.Error("failed to encode receipt", "err", encodeErr)
+		return
+	}
+
+	t.tx.Meta.NewReceiptTrieNode = receiptBuffer.Bytes()
+
+	txBuffer := &bytes.Buffer{}
+	encodeErr = t.ctx.Txn.EncodeRLP(txBuffer)
+
+	if encodeErr != nil {
+		log.Error("failed to encode transaction", "err", encodeErr)
+		return
+	}
+
+	t.tx.Meta.NewTxnTrieNode = txBuffer.Bytes()
+}
+
+func (t *zeroTracer) CaptureEnd(output []byte, gasUsed uint64, err error) {
+	if err != nil {
+		t.txStatus = types.ReceiptStatusFailed
+	} else {
+		t.txStatus = types.ReceiptStatusSuccessful
 	}
 }
 

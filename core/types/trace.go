@@ -32,7 +32,6 @@ type TxnMeta struct {
 	NewTxnTrieNode     HexBytes `json:"new_txn_trie_node_byte,omitempty"`
 	NewReceiptTrieNode HexBytes `json:"new_receipt_trie_node_byte,omitempty"`
 	GasUsed            uint64   `json:"gas_used,omitempty"`
-	Bloom              Bloom    `json:"bloom,omitempty"`
 }
 
 type TxnInfo struct {
@@ -47,7 +46,6 @@ type TriePreImage HexBytes
 type StorageTriesPreImage map[libcommon.Address]TriePreImage
 
 type BlockTrace struct {
-	StateTrie    TriePreImage         `json:"state_trie,omitempty"`
-	StorageTries StorageTriesPreImage `json:"storage_tries,omitempty"`
-	TxnInfo      []TxnInfo            `json:"txn_info,omitempty"`
+	TriePreImage TriePreImage `json:"trie_pre_images,omitempty"`
+	TxnInfo      []TxnInfo    `json:"txn_info,omitempty"`
 }
