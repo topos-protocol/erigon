@@ -66,8 +66,8 @@ func (t *zeroTracer) CaptureStart(env vm.VMInterface, from libcommon.Address, to
 	consumedGas := new(big.Int).Mul(gasPrice.ToBig(), new(big.Int).SetUint64(t.gasLimit))
 	fromBal.Add(fromBal, new(big.Int).Add(value.ToBig(), consumedGas))
 	t.tx.Traces[from].Balance = uint256.MustFromBig(fromBal)
-	if *t.tx.Traces[from].Nonce > uint64(0) {
-		*t.tx.Traces[from].Nonce--
+	if t.tx.Traces[from].Nonce.Cmp(uint256.NewInt(0)) > 0 {
+		t.tx.Traces[from].Nonce.Sub(t.tx.Traces[from].Nonce, uint256.NewInt(1))
 	}
 }
 
@@ -156,7 +156,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 	for addr := range t.tx.Traces {
 		trace := t.tx.Traces[addr]
 		newBalance := t.env.IntraBlockState().GetBalance(addr)
-		newNonce := t.env.IntraBlockState().GetNonce(addr)
+		newNonce := uint256.NewInt(t.env.IntraBlockState().GetNonce(addr))
 		codeHash := t.env.IntraBlockState().GetCodeHash(addr)
 		code := t.env.IntraBlockState().GetCode(addr)
 
@@ -169,8 +169,8 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			trace.Balance = nil
 		}
 
-		if newNonce != *trace.Nonce {
-			trace.Nonce = &newNonce
+		if newNonce.Cmp(trace.Nonce) != 0 {
+			trace.Nonce = newNonce
 			changed = true
 		} else {
 			trace.Nonce = nil
@@ -286,12 +286,12 @@ func (t *zeroTracer) addAccountToTrace(addr libcommon.Address, created bool) {
 		return
 	}
 
-	nonce := t.env.IntraBlockState().GetNonce(addr)
+	nonce := uint256.NewInt(t.env.IntraBlockState().GetNonce(addr))
 	codeHash := t.env.IntraBlockState().GetCodeHash(addr)
 
 	t.tx.Traces[addr] = &types.TxnTrace{
 		Balance:        t.env.IntraBlockState().GetBalance(addr),
-		Nonce:          &nonce,
+		Nonce:          nonce,
 		CodeUsage:      &types.ContractCodeUsage{Read: &codeHash},
 		StorageWritten: make(map[libcommon.Hash]*uint256.Int),
 		StorageRead:    make([]libcommon.Hash, 0),

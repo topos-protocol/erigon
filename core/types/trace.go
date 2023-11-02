@@ -20,7 +20,7 @@ type ContractCodeUsage struct {
 
 type TxnTrace struct {
 	Balance        *uint256.Int                    `json:"balance,omitempty"`
-	Nonce          *uint64                         `json:"nonce,omitempty"`
+	Nonce          *uint256.Int                    `json:"nonce,omitempty"`
 	StorageRead    []libcommon.Hash                `json:"storage_read,omitempty"`
 	StorageWritten map[libcommon.Hash]*uint256.Int `json:"storage_written,omitempty"`
 	CodeUsage      *ContractCodeUsage              `json:"code_usage,omitempty"`
@@ -42,6 +42,14 @@ type TxnInfo struct {
 type BlockUsedCodeHashes []libcommon.Hash
 
 type TriePreImage HexBytes
+
+type CombinedPreImages struct {
+	Compact HexBytes `json:"compact,omitempty"`
+}
+
+type BlockTraceTriePreImages struct {
+	Combined CombinedPreImages `json:"combined,omitempty"`
+}
 
 type StorageTriesPreImage map[libcommon.Address]TriePreImage
 

@@ -3,7 +3,7 @@ package jsonrpc
 import (
 	"context"
 	"encoding/binary"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -188,7 +188,21 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 			return err
 		}
 
-		stream.WriteString(hex.EncodeToString(witness_bytes))
+		preImage := types.BlockTraceTriePreImages{
+			Combined: types.CombinedPreImages{
+				Compact: witness_bytes,
+			},
+		}
+
+		preImageHex, err := json.Marshal(preImage)
+
+		if err != nil {
+			log.Warn("error while marshalling preImage", "err", err)
+			stream.WriteNil()
+			return err
+		}
+
+		stream.Write(json.RawMessage(preImageHex))
 
 		stream.WriteObjectEnd()
 
