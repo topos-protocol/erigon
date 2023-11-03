@@ -213,7 +213,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 		delete(t.tx.Traces, addr)
 	}
 
-	receipt := &types.Receipt{Type: t.ctx.Txn.Type(), CumulativeGasUsed: *t.ctx.CumulativeGasUsed}
+	receipt := &types.Receipt{Type: types.LegacyTxType, CumulativeGasUsed: *t.ctx.CumulativeGasUsed}
 	receipt.Status = t.txStatus
 	receipt.TxHash = t.ctx.Txn.Hash()
 	receipt.GasUsed = t.tx.Meta.GasUsed
