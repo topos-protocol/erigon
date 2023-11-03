@@ -188,9 +188,9 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 			return err
 		}
 
-		preImage := types.BlockTraceTriePreImages{
+		preImage := types.TriePreImage{
 			Combined: types.CombinedPreImages{
-				Compact: witness_bytes,
+				Compact: types.HexBytes(witness_bytes),
 			},
 		}
 

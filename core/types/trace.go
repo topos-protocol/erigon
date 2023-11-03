@@ -41,17 +41,13 @@ type TxnInfo struct {
 
 type BlockUsedCodeHashes []libcommon.Hash
 
-type TriePreImage HexBytes
-
 type CombinedPreImages struct {
 	Compact HexBytes `json:"compact,omitempty"`
 }
 
-type BlockTraceTriePreImages struct {
+type TriePreImage struct {
 	Combined CombinedPreImages `json:"combined,omitempty"`
 }
-
-type StorageTriesPreImage map[libcommon.Address]TriePreImage
 
 type BlockTrace struct {
 	TriePreImage TriePreImage `json:"trie_pre_images,omitempty"`
