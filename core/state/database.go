@@ -32,7 +32,6 @@ import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon-lib/kv/bitmapdb"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/log/v3"
@@ -968,30 +967,6 @@ func (tds *TrieDbState) UnwindTo(blockNr uint64) error {
 // 	}
 // 	return nil
 // }
-
-func (tds *TrieDbState) truncateHistory(timestampTo uint64, accountMap map[string][]byte, storageMap map[string][]byte) error {
-	for plainKey := range accountMap {
-		key, err := common.HashData([]byte(plainKey)[:])
-		if err != nil {
-			return err
-		}
-
-		if err := bitmapdb.TruncateRange64(tds.db, string(kv.AccountsHistory), key[:], timestampTo+1); err != nil {
-			return fmt.Errorf("fail TruncateRange: bucket=%s, %w", kv.AccountsHistory)
-		}
-	}
-	for plainKey := range storageMap {
-		key, err := common.HashData([]byte(plainKey)[:])
-		if err != nil {
-			return err
-		}
-
-		if err := bitmapdb.TruncateRange64(tds.db, string(kv.AccountsHistory), dbutils.CompositeKeyWithoutIncarnation(key[:]), timestampTo+1); err != nil {
-			return fmt.Errorf("fail TruncateRange: bucket=%s, %w", kv.AccountsHistory)
-		}
-	}
-	return nil
-}
 
 func (tds *TrieDbState) readAccountDataByHash(addrHash libcommon.Hash) (*accounts.Account, error) {
 	if acc, ok := tds.GetAccount(addrHash); ok {
