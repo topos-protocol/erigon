@@ -60,7 +60,7 @@ var rootCmd = &cobra.Command{
 		if genesisPath != "" {
 			genesis = genesisFromFile(genesisPath)
 		}
-		if genesis.Config != nil && genesis.Config.ChainID.Cmp(chainConfig.ChainID) != 0 {
+		if genesisPath == "" && genesis.Config != nil && genesis.Config.ChainID.Cmp(chainConfig.ChainID) != 0 {
 			utils.Fatalf("provided genesis.json chain configuration is invalid: expected chainId to be %v, got %v",
 				chainConfig.ChainID.String(), genesis.Config.ChainID.String())
 		}

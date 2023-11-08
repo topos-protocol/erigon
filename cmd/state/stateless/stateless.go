@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -23,6 +22,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/memdb"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/clique"
+	"github.com/ledgerwatch/erigon/consensus/ethash"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -160,7 +160,8 @@ func Stateless(
 	useStatelessResolver bool,
 	witnessDatabasePath string,
 	writeHistory bool,
-	genesisFile string,
+	genesis *types.Genesis,
+	chain string,
 ) {
 	ethconfig.EnableStateless = true
 	state.MaxTrieCacheSize = uint64(triesize)
@@ -201,17 +202,6 @@ func Stateless(
 	check(err)
 	defer db.Close()
 
-	var genesis = core.DeveloperGenesisBlock(5, core.DevnetEtherbase)
-	if genesisFile != "" {
-		genBytes, err := os.ReadFile(genesisFile)
-		if err != nil {
-			check(err)
-		}
-		err = json.Unmarshal(genBytes, genesis)
-		if err != nil {
-			check(err)
-		}
-	}
 	chainConfig := genesis.Config
 
 	var preRoot common.Hash
@@ -232,7 +222,14 @@ func Stateless(
 	}
 
 	vmConfig := vm.Config{}
-	engine := clique.New(chainConfig, params.CliqueSnapshot, memdb.New(""), log.New())
+
+	var engine consensus.Engine
+
+	if chain == "mainnet" {
+		engine = ethash.NewFullFaker()
+	} else {
+		engine = clique.New(chainConfig, params.CliqueSnapshot, memdb.New(""), log.New())
+	}
 
 	fmt.Printf("extra data %s\n", hex.EncodeToString(genesis.ExtraData))
 

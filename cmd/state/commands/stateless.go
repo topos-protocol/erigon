@@ -37,6 +37,7 @@ func init() {
 	withStatsfile(statelessCmd)
 	withBlock(statelessCmd)
 	withBlocksource(statelessCmd)
+	withChain(statelessCmd)
 
 	statelessCmd.Flags().StringVar(&statefile, "statefile", "state", "path to the file where the state will be periodically written during the analysis")
 	statelessCmd.Flags().Uint64Var(&stopBlock, "stopBlock", 0, "block number to stop at (0 - do not stop)")
@@ -52,7 +53,7 @@ func init() {
 	statelessCmd.Flags().BoolVar(&statelessResolver, "statelessResolver", false, "use a witness DB instead of the state when resolving tries")
 	statelessCmd.Flags().StringVar(&witnessDatabase, "witnessDbFile", "", "optional path to a database where to store witnesses (empty string -- do not store witnesses")
 	statelessCmd.Flags().BoolVar(&writeHistory, "writeHistory", false, "write history buckets and changeset buckets into the statefile")
-	statelessCmd.Flags().StringVar(&genesisFile, "genesisFile", "", "A genesis file that was used to init the chain")
+	// statelessCmd.Flags().StringVar(&genesisFile, "genesisFile", "", "A genesis file that was used to init the chain")
 	if err := statelessCmd.MarkFlagFilename("witnessDbFile", ""); err != nil {
 		panic(err)
 	}
@@ -91,7 +92,8 @@ var statelessCmd = &cobra.Command{
 			statelessResolver,
 			witnessDatabase,
 			writeHistory,
-			genesisFile,
+			genesis,
+			chain,
 		)
 
 		return nil

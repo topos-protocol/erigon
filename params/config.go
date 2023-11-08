@@ -211,6 +211,8 @@ func ChainConfigByChainName(chain string) *chain.Config {
 		return GnosisChainConfig
 	case networkname.ChiadoChainName:
 		return ChiadoChainConfig
+	case networkname.DevChainName:
+		return TestChainConfig
 	default:
 		return nil
 	}
