@@ -15,6 +15,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/eth/tracers"
+	"github.com/ledgerwatch/erigon/rlp"
 	"github.com/ledgerwatch/log/v3"
 )
 
@@ -49,7 +50,10 @@ func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, e
 func (t *zeroTracer) CaptureStart(env vm.VMInterface, from libcommon.Address, to libcommon.Address, precompile, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) {
 	t.to = &to
 	t.env = env
-	t.tx.Meta.ByteCode = input
+
+	buffer := &bytes.Buffer{}
+	rlp.Encode(buffer, input)
+	t.tx.Meta.ByteCode = buffer.Bytes()
 
 	t.addAccountToTrace(from, false)
 	t.addAccountToTrace(to, false)
