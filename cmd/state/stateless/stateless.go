@@ -263,31 +263,19 @@ func Stateless(
 		panic("to use stateless resolver, set the witness DB path")
 	}
 
-	if witnessDatabasePath != "" {
-		var db kv.RwDB
+	statsFilePath := fmt.Sprintf("%v.stats.csv", witnessDatabasePath)
 
-		db = blockProvider.DB()
+	var file *os.File
+	file, err = os.OpenFile(statsFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
+	check(err)
+	defer file.Close()
 
-		if useStatelessResolver {
-			witnessDBReader = NewWitnessDBReader(db)
-			// fmt.Printf("Will use the stateless resolver with DB: %s\n", witnessDatabasePath)
-		} else {
-			statsFilePath := fmt.Sprintf("%v.stats.csv", witnessDatabasePath)
+	statsFileCsv := csv.NewWriter(file)
+	defer statsFileCsv.Flush()
 
-			var file *os.File
-			file, err = os.OpenFile(statsFilePath, os.O_RDWR|os.O_CREATE, os.ModePerm)
-			check(err)
-			defer file.Close()
-
-			statsFileCsv := csv.NewWriter(file)
-			defer statsFileCsv.Flush()
-
-			witnessDBWriter, err = NewWitnessDBWriter(db, statsFileCsv)
-			check(err)
-			fmt.Printf("witnesses will be stored to a db at path: %s\n\tstats: %s\n", witnessDatabasePath, statsFilePath)
-		}
-
-	}
+	witnessDBWriter, err = NewWitnessDBWriter(blockProvider.DB(), statsFileCsv)
+	check(err)
+	fmt.Printf("witnesses will be stored to a db at path: %s\n\tstats: %s\n", witnessDatabasePath, statsFilePath)
 
 	err = blockProvider.FastFwd(blockNum)
 	check(err)
@@ -485,11 +473,7 @@ func Stateless(
 			}
 			return
 		}
-		if !chainConfig.IsByzantium(header.Number.Uint64()) {
-			for i, receipt := range receipts {
-				receipt.PostState = roots[i].Bytes()
-			}
-		}
+
 		nextRoot := roots[len(roots)-1]
 		if nextRoot != block.Root() {
 			fmt.Printf("Root hash does not match for block %d, expected %x, was %x\n", blockNum, block.Root(), nextRoot)
