@@ -40,24 +40,24 @@ type BlockProvider interface {
 	DB() kv.RwDB
 }
 
-func BlockProviderForURI(uri string, createDBFunc CreateDbFunc) (BlockProvider, error) {
-	url, err := url.Parse(uri)
-	if err != nil {
-		return nil, err
-	}
-	switch url.Scheme {
-	case fileSchemeExportfile:
-		fmt.Println("Source of blocks: export file @", url.Path)
-		return NewBlockProviderFromExportFile(url.Path)
-	case fileSchemeDB:
-		fallthrough
-	default:
-		fmt.Println("Source of blocks: db @", url.Path)
-		return NewBlockProviderFromDB(url.Path, createDBFunc)
-	}
-}
+// func BlockProviderForURI(uri string, createDBFunc CreateDbFunc) (BlockProvider, error) {
+// 	url, err := url.Parse(uri)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	switch url.Scheme {
+// 	case fileSchemeExportfile:
+// 		fmt.Println("Source of blocks: export file @", url.Path)
+// 		return NewBlockProviderFromExportFile(url.Path)
+// 	case fileSchemeDB:
+// 		fallthrough
+// 	default:
+// 		fmt.Println("Source of blocks: db @", url.Path)
+// 		return NewBlockProviderFromDB(url.Path, createDBFunc)
+// 	}
+// }
 
-func blocksIO(db kv.RoDB) (services.FullBlockReader, *blockio.BlockWriter) {
+func blocksIO(db kv.RoDB, snapshotPath string) (services.FullBlockReader, *blockio.BlockWriter) {
 	var histV3 bool
 	if err := db.View(context.Background(), func(tx kv.Tx) error {
 		histV3, _ = kvcfg.HistoryV3.Enabled(tx)
@@ -65,7 +65,14 @@ func blocksIO(db kv.RoDB) (services.FullBlockReader, *blockio.BlockWriter) {
 	}); err != nil {
 		panic(err)
 	}
-	br := freezeblocks.NewBlockReader(freezeblocks.NewRoSnapshots(ethconfig.BlocksFreezing{Enabled: false}, "", log.New()), nil /* BorSnapshots */)
+
+	snapshotCfg := ethconfig.NewSnapCfg(true, true, false)
+
+	allSnapshots := freezeblocks.NewRoSnapshots(snapshotCfg, snapshotPath, log.New())
+
+	allSnapshots.OptimisticalyReopenWithDB(db)
+
+	br := freezeblocks.NewBlockReader(allSnapshots, nil /* BorSnapshots */)
 	bw := blockio.NewBlockWriter(histV3)
 	return br, bw
 }
@@ -76,10 +83,16 @@ type BlockChainBlockProvider struct {
 	db           kv.RwDB
 }
 
-func NewBlockProviderFromDB(path string, createDBFunc CreateDbFunc) (BlockProvider, error) {
-	ethDB, err := createDBFunc(path)
+func NewBlockProviderFromDataDir(path string, createDBFunc CreateDbFunc) (BlockProvider, error) {
+	chaindata, err := url.JoinPath(path, "chaindata")
+	check(err)
 
-	br, _ := blocksIO(ethDB)
+	ethDB, err := createDBFunc(chaindata)
+
+	snapshotDir, err := url.JoinPath(path, "snapshots")
+	check(err)
+
+	br, _ := blocksIO(ethDB, snapshotDir)
 
 	if err != nil {
 		return nil, err

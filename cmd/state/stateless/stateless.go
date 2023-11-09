@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -75,6 +74,8 @@ func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.Stat
 	if _, _, _, err := engine.FinalizeAndAssemble(chainConfig, block.Header(), ibs, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
 		return nil, err
 	}
+
+	ibs.FinalizeTx(chainConfig.Rules(block.NumberU64(), header.Time), txnWriter)
 
 	return receipts, nil
 }
@@ -144,7 +145,7 @@ func Stateless(
 	ctx context.Context,
 	blockNum uint64,
 	stopBlock uint64,
-	blockSourceURI string,
+	datadir string,
 	statefile string,
 	triesize uint32,
 	tryPreRoot bool,
@@ -188,7 +189,7 @@ func Stateless(
 	check(err)
 	defer stats.Close()
 
-	blockProvider, err := BlockProviderForURI(blockSourceURI, createDb)
+	blockProvider, err := NewBlockProviderFromDataDir(datadir, createDb)
 	check(err)
 	defer blockProvider.Close()
 
@@ -265,16 +266,7 @@ func Stateless(
 	if witnessDatabasePath != "" {
 		var db kv.RwDB
 
-		uri, err := url.Parse(blockSourceURI)
-		check(err)
-
-		if witnessDatabasePath == uri.Path {
-			db = blockProvider.DB()
-		} else {
-			db, err = createDb(witnessDatabasePath)
-			check(err)
-			defer db.Close()
-		}
+		db = blockProvider.DB()
 
 		if useStatelessResolver {
 			witnessDBReader = NewWitnessDBReader(db)
@@ -365,6 +357,8 @@ func Stateless(
 			fmt.Printf("Finalize of block %d failed: %v\n", blockNum, err)
 			return
 		}
+
+		statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), header.Time), tds.TrieStateWriter())
 
 		if witnessDBReader != nil {
 			tds.SetBlockNr(blockNum)

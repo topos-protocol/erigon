@@ -97,7 +97,7 @@ func (s *Stateless) ReadAccountData(address libcommon.Address) (*accounts.Accoun
 	if ok {
 		return acc, nil
 	}
-	return nil, fmt.Errorf("could not find account with address %x", address)
+	return nil, nil
 }
 
 // ReadAccountStorage is a part of the StateReader interface

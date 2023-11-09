@@ -36,8 +36,9 @@ func withBlocksource(cmd *cobra.Command) {
 func init() {
 	withStatsfile(statelessCmd)
 	withBlock(statelessCmd)
-	withBlocksource(statelessCmd)
+	// withBlocksource(statelessCmd)
 	withChain(statelessCmd)
+	withDataDir(statelessCmd)
 
 	statelessCmd.Flags().StringVar(&statefile, "statefile", "state", "path to the file where the state will be periodically written during the analysis")
 	statelessCmd.Flags().Uint64Var(&stopBlock, "stopBlock", 0, "block number to stop at (0 - do not stop)")
@@ -76,7 +77,7 @@ var statelessCmd = &cobra.Command{
 			ctx,
 			block,
 			stopBlock,
-			blockSource,
+			datadirCli,
 			statefile,
 			triesize,
 			preroot,
