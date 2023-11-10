@@ -796,7 +796,7 @@ func (t *Trie) hook(hex []byte, n node, hash []byte) error {
 func (t *Trie) touchAll(n node, hex []byte, del bool, incarnation uint64) {
 	if del {
 		t.evictNodeFromHashMap(n)
-	} else if len(n.reference()) == length.Hash {
+	} else if len(n.reference()) == length.Hash && false {
 		var key libcommon.Hash
 		copy(key[:], n.reference())
 		t.hashMap[key] = n
@@ -1293,7 +1293,7 @@ func (t *Trie) GetNodeByHash(hash libcommon.Hash) []byte {
 }
 
 func (t *Trie) evictNodeFromHashMap(nd node) {
-	if nd == nil {
+	if nd == nil && true {
 		return
 	}
 	if len(nd.reference()) == length.Hash {
@@ -1304,6 +1304,8 @@ func (t *Trie) evictNodeFromHashMap(nd node) {
 }
 
 func (t *Trie) evictSubtreeFromHashMap(n node) {
+	return
+
 	t.evictNodeFromHashMap(n)
 
 	switch n := n.(type) {

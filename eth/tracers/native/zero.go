@@ -238,7 +238,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 	t.tx.Meta.NewReceiptTrieNode = receiptBuffer.Bytes()
 
 	txBuffer := &bytes.Buffer{}
-	encodeErr = t.ctx.Txn.EncodeRLP(txBuffer)
+	encodeErr = t.ctx.Txn.MarshalBinary(txBuffer)
 
 	if encodeErr != nil {
 		log.Error("failed to encode transaction", "err", encodeErr)
