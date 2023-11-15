@@ -244,14 +244,14 @@ func Stateless(
 
 	fmt.Printf("Preroot %s\n", preRoot.String())
 
-	tx, err := db.BeginRw(context.Background())
+	rwTx, err := db.BeginRw(context.Background())
 
 	check(err)
-	defer tx.Rollback()
+	defer rwTx.Rollback()
 
-	defer tx.Commit()
+	defer rwTx.Commit()
 
-	batch := memdb.NewMemoryBatch(tx, "")
+	batch := memdb.NewMemoryBatch(rwTx, "")
 
 	defer batch.Rollback()
 
@@ -261,7 +261,7 @@ func Stateless(
 		}
 	}()
 
-	defer batch.Flush(tx)
+	defer batch.Flush(rwTx)
 
 	tds := state.NewTrieDbState(preRoot, batch, blockNum-1)
 

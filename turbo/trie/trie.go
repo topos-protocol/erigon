@@ -315,7 +315,7 @@ func (t *Trie) UpdateAccountCode(key []byte, code codeNode) error {
 		return fmt.Errorf("inserted code mismatch account hash (acc.CodeHash=%x codeHash=%x)", accNode.CodeHash[:], actualCodeHash)
 	}
 
-	accNode.code = code
+	accNode.code = codeNode(bytes.Clone(code))
 	accNode.codeSize = len(code)
 
 	// t.insert will call the observer methods itself
