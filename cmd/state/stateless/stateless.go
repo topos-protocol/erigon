@@ -521,11 +521,11 @@ func Stateless(
 			}
 		}
 
-		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
+		// willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		if willSnapshot {
-			tds.EvictTries(false)
-		}
+		// if willSnapshot {
+		// 	tds.EvictTries(false)
+		// }
 
 		preRoot = header.Root
 		blockNum++
