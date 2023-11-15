@@ -116,7 +116,7 @@ func (s *Stateless) ReadAccountStorage(address libcommon.Address, incarnation ui
 	if enc, ok := s.t.Get(dbutils.GenerateCompositeTrieKey(addrHash, seckey)); ok {
 		return enc, nil
 	}
-	return nil, fmt.Errorf("could not find storage item %x in account with address %x", key, address)
+	return nil, nil
 }
 
 // ReadAccountCode is a part of the StateReader interface
@@ -140,7 +140,7 @@ func (s *Stateless) ReadAccountCode(address libcommon.Address, incarnation uint6
 	if code, ok := s.t.GetAccountCode(addrHash[:]); ok {
 		return code, nil
 	}
-	return nil, fmt.Errorf("could not find bytecode for acc: %x hash %x", address, codeHash)
+	return nil, nil
 }
 
 // ReadAccountCodeSize is a part of the StateReader interface
@@ -168,7 +168,7 @@ func (s *Stateless) ReadAccountCodeSize(address libcommon.Address, incarnation u
 		return codeSize, nil
 	}
 
-	return 0, fmt.Errorf("could not find bytecode for hash %x", codeHash)
+	return 0, nil
 }
 
 func (s *Stateless) ReadAccountIncarnation(address libcommon.Address) (uint64, error) {

@@ -44,7 +44,7 @@ var chartColors = []drawing.Color{
 	chart.ColorGreen,
 }
 
-func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.StateWriter, trieStateWriter state.StateWriter, blockWriter state.StateWriter, chainConfig *chain.Config, block *types.Block, vmConfig vm.Config, engine consensus.Engine) (types.Receipts, error) {
+func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.StateWriter, blockWriter state.StateWriter, chainConfig *chain.Config, block *types.Block, vmConfig vm.Config, engine consensus.Engine) (types.Receipts, error) {
 	header := block.Header()
 
 	getHeader := func(hash common.Hash, number uint64) *types.Header {
@@ -71,11 +71,19 @@ func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.Stat
 		receipts = append(receipts, receipt)
 	}
 
-	if _, _, _, err := engine.FinalizeAndAssemble(chainConfig, block.Header(), ibs, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
-		return nil, err
-	}
+	if !vmConfig.ReadOnly {
+		if _, _, _, err := engine.FinalizeAndAssemble(chainConfig, block.Header(), ibs, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
+			return nil, err
+		}
 
-	ibs.FinalizeTx(chainConfig.Rules(block.NumberU64(), header.Time), txnWriter)
+		rules := chainConfig.Rules(block.NumberU64(), header.Time)
+
+		ibs.FinalizeTx(rules, txnWriter)
+
+		if err := ibs.CommitBlock(rules, blockWriter); err != nil {
+			return nil, fmt.Errorf("committing block %d failed: %v", block.NumberU64(), err)
+		}
+	}
 
 	return receipts, nil
 }
@@ -243,7 +251,19 @@ func Stateless(
 
 	defer tx.Commit()
 
-	tds := state.NewTrieDbState(preRoot, tx, blockNum-1)
+	batch := memdb.NewMemoryBatch(tx, "")
+
+	defer batch.Rollback()
+
+	defer func() {
+		if err = batch.Commit(); err != nil {
+			fmt.Printf("Failed to commit batch: %v\n", err)
+		}
+	}()
+
+	defer batch.Flush(tx)
+
+	tds := state.NewTrieDbState(preRoot, batch, blockNum-1)
 
 	tds.SetResolveReads(false)
 	tds.SetNoHistory(!writeHistory)
@@ -279,8 +299,6 @@ func Stateless(
 
 	err = blockProvider.FastFwd(blockNum)
 	check(err)
-
-	stateWriter := tds.DbStateWriter()
 
 	for !interrupt {
 		select {
@@ -338,6 +356,11 @@ func Stateless(
 				check(fmt.Errorf("tx %x failed: %v", tx.Hash(), err))
 				return
 			}
+
+			if !chainConfig.IsByzantium(block.NumberU64()) {
+				tds.StartNewBuffer()
+			}
+
 			receipts = append(receipts, receipt)
 		}
 
@@ -426,7 +449,7 @@ func Stateless(
 			ibs := state.New(s)
 			ibs.SetTrace(trace)
 			s.SetBlockNr(blockNum)
-			if _, err = runBlock(blockProvider, ibs, s, tds.TrieStateWriter(), stateWriter, chainConfig, block, vmConfig, engine); err != nil {
+			if _, err = runBlock(blockProvider, ibs, s, s, chainConfig, block, vmConfig, engine); err != nil {
 				fmt.Printf("Error running block %d through stateless2: %v\n", blockNum, err)
 				finalRootFail = true
 			} else if !binary {
@@ -498,11 +521,11 @@ func Stateless(
 			}
 		}
 
-		// willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
+		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		// if willSnapshot {
-		// 	tds.EvictTries(false)
-		// }
+		if willSnapshot {
+			tds.EvictTries(false)
+		}
 
 		preRoot = header.Root
 		blockNum++
