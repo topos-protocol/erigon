@@ -59,7 +59,7 @@ func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.Stat
 	usedGas := new(uint64)
 	var receipts types.Receipts
 
-	if err := core.InitializeBlockExecution(engine, nil, block.Header(), chainConfig, ibs, nil); err != nil {
+	if err := core.InitializeBlockExecution(engine, nil, block.Header(), chainConfig, ibs, txnWriter, nil); err != nil {
 		return nil, err
 	}
 
@@ -330,7 +330,9 @@ func Stateless(
 		header := block.Header()
 		tds.StartNewBuffer()
 		var receipts types.Receipts
-		if err := core.InitializeBlockExecution(engine, nil, block.Header(), chainConfig, statedb, nil); err != nil {
+		trieStateWriter := tds.TrieStateWriter()
+
+		if err := core.InitializeBlockExecution(engine, nil, block.Header(), chainConfig, statedb, trieStateWriter, nil); err != nil {
 			fmt.Printf("Error initializing block %d: %v\n", blockNum, err)
 			return
 		}
@@ -351,7 +353,7 @@ func Stateless(
 		getHashFn := core.GetHashFn(block.Header(), getHeader)
 
 		for _, tx := range block.Transactions() {
-			receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, statedb, tds.TrieStateWriter(), header, tx, usedGas, nil, vmConfig)
+			receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, statedb, trieStateWriter, header, tx, usedGas, nil, vmConfig)
 			if err != nil {
 				check(fmt.Errorf("tx %x failed: %v", tx.Hash(), err))
 				return
@@ -369,7 +371,7 @@ func Stateless(
 			return
 		}
 
-		statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), header.Time), tds.TrieStateWriter())
+		statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), header.Time), trieStateWriter)
 
 		if witnessDBReader != nil {
 			tds.SetBlockNr(blockNum)
