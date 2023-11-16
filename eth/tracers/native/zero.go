@@ -290,7 +290,7 @@ func (t *zeroTracer) addAccountToTrace(addr libcommon.Address, created bool) {
 	codeHash := t.env.IntraBlockState().GetCodeHash(addr)
 
 	t.tx.Traces[addr] = &types.TxnTrace{
-		Balance:        t.env.IntraBlockState().GetBalance(addr),
+		Balance:        t.env.IntraBlockState().GetBalance(addr).Clone(),
 		Nonce:          nonce,
 		CodeUsage:      &types.ContractCodeUsage{Read: &codeHash},
 		StorageWritten: make(map[libcommon.Hash]*uint256.Int),
