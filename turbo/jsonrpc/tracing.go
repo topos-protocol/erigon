@@ -172,7 +172,9 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 	}
 
 	if *config.Tracer == "zeroTracer" {
-		stream.WriteMore()
+		if len(txns) != 0 {
+			stream.WriteMore()
+		}
 		stream.WriteObjectStart()
 		stream.WriteObjectField("block_witness")
 
