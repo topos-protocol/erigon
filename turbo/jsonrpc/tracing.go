@@ -14,6 +14,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
+	"github.com/ledgerwatch/erigon/cmd/state/stateless"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 
 	"github.com/ledgerwatch/erigon/common/hexutil"
@@ -182,7 +183,7 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 
 		binary.LittleEndian.PutUint64(k[:], block.NumberU64())
 
-		witness_bytes, err := tx.GetOne(kv.Witnesses, k)
+		witness_bytes, err := stateless.ReadChunks(tx, kv.Witnesses, k)
 
 		if err != nil {
 			log.Warn("error while reading witness from db", "err", err)

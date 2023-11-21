@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/csv"
 	"fmt"
+	"strconv"
 
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/common"
@@ -27,6 +28,51 @@ func NewWitnessDBWriter(storage kv.RwDB, statsWriter *csv.Writer) (*WitnessDBWri
 	return &WitnessDBWriter{storage, statsWriter}, nil
 }
 
+const chunkSize = 100000 // 100KB
+
+func WriteChunks(tx kv.RwTx, tableName string, key []byte, valueBytes []byte) error {
+	// Split the valueBytes into chunks and write each chunk
+	for i := 0; i < len(valueBytes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(valueBytes) {
+			end = len(valueBytes)
+		}
+		chunk := valueBytes[i:end]
+		chunkKey := append(key, []byte("_chunk_"+strconv.Itoa(i/chunkSize))...)
+
+		// Write each chunk to the KV store
+		if err := tx.Put(tableName, chunkKey, chunk); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func ReadChunks(tx kv.Tx, tableName string, key []byte) ([]byte, error) {
+	// Initialize a buffer to store the concatenated chunks
+	var result []byte
+
+	// Retrieve and concatenate each chunk
+	for i := 0; ; i++ {
+		chunkKey := append(key, []byte("_chunk_"+strconv.Itoa(i))...)
+		chunk, err := tx.GetOne(tableName, chunkKey)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check if this is the last chunk
+		if len(chunk) == 0 {
+			break
+		}
+
+		// Append the chunk to the result
+		result = append(result, chunk...)
+	}
+
+	return result, nil
+}
+
 func (db *WitnessDBWriter) MustUpsertOneWitness(blockNumber uint64, witness *trie.Witness) {
 	k := make([]byte, 8)
 
@@ -38,7 +84,7 @@ func (db *WitnessDBWriter) MustUpsertOneWitness(blockNumber uint64, witness *tri
 		panic(fmt.Sprintf("error extracting witness for block %d: %v\n", blockNumber, err))
 	}
 
-	bytes := buf.Bytes()
+	wb := buf.Bytes()
 
 	tx, err := db.storage.BeginRw(context.Background())
 	if err != nil {
@@ -47,7 +93,9 @@ func (db *WitnessDBWriter) MustUpsertOneWitness(blockNumber uint64, witness *tri
 
 	defer tx.Rollback()
 
-	err = tx.Put(kv.Witnesses, k, common.CopyBytes(bytes))
+	fmt.Printf("Size of witness: %d\n", len(wb))
+
+	err = WriteChunks(tx, kv.Witnesses, k, common.CopyBytes(wb))
 
 	tx.Commit()
 
