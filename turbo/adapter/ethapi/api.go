@@ -278,9 +278,9 @@ func RPCMarshalHeader(head *types.Header) map[string]interface{} {
 	pubkey, err := crypto.Ecrecover(SealHash(head).Bytes(), signature)
 	if err != nil {
 		signer = libcommon.Address{}
+	} else {
+		copy(signer[:], crypto.Keccak256(pubkey[1:])[12:])
 	}
-
-	copy(signer[:], crypto.Keccak256(pubkey[1:])[12:])
 
 	result := map[string]interface{}{
 		"number":           (*hexutil.Big)(head.Number),
