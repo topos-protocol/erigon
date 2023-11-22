@@ -38,6 +38,7 @@ type BlockProvider interface {
 	NextBlock() (*types.Block, error)
 	Header(blockNum uint64, blockHash common.Hash) (*types.Header, error)
 	DB() kv.RwDB
+	BR() services.FullBlockReader
 }
 
 // func BlockProviderForURI(uri string, createDBFunc CreateDbFunc) (BlockProvider, error) {
@@ -102,6 +103,10 @@ func NewBlockProviderFromDataDir(path string, createDBFunc CreateDbFunc) (BlockP
 		br: br,
 		db: ethDB,
 	}, nil
+}
+
+func (p *BlockChainBlockProvider) BR() services.FullBlockReader {
+	return p.br
 }
 
 func (p *BlockChainBlockProvider) DB() kv.RwDB {
@@ -179,6 +184,10 @@ func NewBlockProviderFromExportFile(fn string) (BlockProvider, error) {
 	// keeping all the past block headers in memory
 	headersDB := mdbx.MustOpen(getTempFileName())
 	return &ExportFileBlockProvider{stream, engine, headersDB, nil, fh, reader, -1}, nil
+}
+
+func (p *ExportFileBlockProvider) BR() services.FullBlockReader {
+	return nil
 }
 
 func getTempFileName() string {

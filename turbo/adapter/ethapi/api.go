@@ -270,16 +270,17 @@ func FormatLogs(logs []logger.StructLog) []StructLogRes {
 func RPCMarshalHeader(head *types.Header) map[string]interface{} {
 	var signer libcommon.Address
 	if len(head.Extra) < crypto.SignatureLength {
-		signer = libcommon.Address{}
-	}
-	signature := head.Extra[len(head.Extra)-crypto.SignatureLength:]
-
-	// Recover the public key and the Ethereum address
-	pubkey, err := crypto.Ecrecover(SealHash(head).Bytes(), signature)
-	if err != nil {
-		signer = libcommon.Address{}
+		signer = head.Coinbase
 	} else {
-		copy(signer[:], crypto.Keccak256(pubkey[1:])[12:])
+		signature := head.Extra[len(head.Extra)-crypto.SignatureLength:]
+
+		// Recover the public key and the Ethereum address
+		pubkey, err := crypto.Ecrecover(SealHash(head).Bytes(), signature)
+		if err != nil {
+			signer = libcommon.Address{}
+		} else {
+			copy(signer[:], crypto.Keccak256(pubkey[1:])[12:])
+		}
 	}
 
 	result := map[string]interface{}{

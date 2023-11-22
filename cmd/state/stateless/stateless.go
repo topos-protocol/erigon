@@ -22,11 +22,13 @@ import (
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/clique"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
+	"github.com/ledgerwatch/erigon/consensus/merge"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/vm"
 	"github.com/ledgerwatch/erigon/eth/ethconfig"
+	"github.com/ledgerwatch/erigon/eth/stagedsync"
 	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/turbo/trie"
 	"github.com/ledgerwatch/erigon/visual"
@@ -59,9 +61,20 @@ func runBlock(bp BlockProvider, ibs *state.IntraBlockState, txnWriter state.Stat
 	usedGas := new(uint64)
 	var receipts types.Receipts
 
-	if err := core.InitializeBlockExecution(engine, nil, block.Header(), chainConfig, ibs, txnWriter, nil); err != nil {
+	rTx, err := bp.DB().BeginRo(context.Background())
+
+	if err != nil {
+		fmt.Printf("Error opening tx: %v\n", err)
 		return nil, err
 	}
+
+	chainReader := stagedsync.ChainReader{Cfg: *chainConfig, Db: rTx, BlockReader: bp.BR()}
+
+	if err := core.InitializeBlockExecution(engine, chainReader, block.Header(), chainConfig, ibs, txnWriter, nil); err != nil {
+		return nil, err
+	}
+
+	rTx.Rollback()
 
 	for _, tx := range block.Transactions() {
 		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, ibs, txnWriter, header, tx, usedGas, nil, vmConfig)
@@ -232,14 +245,6 @@ func Stateless(
 
 	vmConfig := vm.Config{}
 
-	var engine consensus.Engine
-
-	if chain == "mainnet" {
-		engine = ethash.NewFullFaker()
-	} else {
-		engine = clique.New(chainConfig, params.CliqueSnapshot, memdb.New(""), log.New())
-	}
-
 	fmt.Printf("extra data %s\n", hex.EncodeToString(genesis.ExtraData))
 
 	fmt.Printf("Preroot %s\n", preRoot.String())
@@ -323,6 +328,19 @@ func Stateless(
 		if block.NumberU64() != blockNum {
 			check(fmt.Errorf("block number mismatch (want=%v got=%v)", blockNum, block.NumberU64()))
 		}
+
+		var engine consensus.Engine
+
+		if chain == "mainnet" {
+			engine = ethash.NewFullFaker()
+			if chainConfig.IsShanghai(block.Time()) {
+				engine = merge.New(ethash.NewFullFaker())
+			}
+			// engine = ethash.NewFullFaker()
+		} else {
+			engine = clique.New(chainConfig, params.CliqueSnapshot, memdb.New(""), log.New())
+		}
+
 		execStart := time.Now()
 		statedb := state.New(tds)
 		gp := new(core.GasPool).AddGas(block.GasLimit())
@@ -332,10 +350,21 @@ func Stateless(
 		var receipts types.Receipts
 		trieStateWriter := tds.TrieStateWriter()
 
-		if err := core.InitializeBlockExecution(engine, nil, block.Header(), chainConfig, statedb, trieStateWriter, nil); err != nil {
+		tx, err := blockProvider.DB().BeginRo(context.Background())
+
+		if err != nil {
+			fmt.Printf("Error opening tx: %v\n", err)
+			return
+		}
+
+		chainReader := stagedsync.ChainReader{Cfg: *chainConfig, Db: tx, BlockReader: blockProvider.BR()}
+
+		if err := core.InitializeBlockExecution(engine, chainReader, block.Header(), chainConfig, statedb, trieStateWriter, nil); err != nil {
 			fmt.Printf("Error initializing block %d: %v\n", blockNum, err)
 			return
 		}
+
+		tx.Rollback()
 
 		// When a block is empty, nothing will be read from statedb in some consensus, e.g. clique.
 		// The trie remains empty in memory, so it will yield a wrong root hash. Reading an arbitrary account from statedb will populate trie and make everything right.
