@@ -1,6 +1,7 @@
 package jsonrpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -29,6 +30,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/adapter/ethapi"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
+	"github.com/ledgerwatch/erigon/turbo/trie"
 )
 
 // TraceBlockByNumber implements debug_traceBlockByNumber. Returns Geth style block traces.
@@ -183,7 +185,29 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 
 		binary.LittleEndian.PutUint64(k[:], block.NumberU64())
 
-		witness_bytes, err := stateless.ReadChunks(tx, kv.Witnesses, k)
+		var witness_bytes []byte
+
+		if block.NumberU64() > 0 {
+			witness_bytes, err = stateless.ReadChunks(tx, kv.Witnesses, k)
+		} else {
+			emptyTrie := trie.Trie{}
+			w, err := emptyTrie.ExtractWitness(false, nil)
+			if err != nil {
+				log.Warn("error while extracting empty witness", "err", err)
+				stream.WriteNil()
+				return err
+			}
+
+			var buf bytes.Buffer
+			_, err = w.WriteInto(&buf)
+			if err != nil {
+				log.Warn("error while writing empty witness to buffer", "err", err)
+				stream.WriteNil()
+				return err
+			}
+
+			witness_bytes = buf.Bytes()
+		}
 
 		if err != nil {
 			log.Warn("error while reading witness from db", "err", err)

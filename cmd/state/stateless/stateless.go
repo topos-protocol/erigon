@@ -251,19 +251,19 @@ func Stateless(
 
 	defer rwTx.Commit()
 
-	batch := memdb.NewMemoryBatch(rwTx, "")
+	// batch := memdb.NewMemoryBatch(rwTx, "")
 
-	defer batch.Rollback()
+	// defer batch.Rollback()
 
-	defer func() {
-		if err = batch.Commit(); err != nil {
-			fmt.Printf("Failed to commit batch: %v\n", err)
-		}
-	}()
+	// defer func() {
+	// 	if err = batch.Commit(); err != nil {
+	// 		fmt.Printf("Failed to commit batch: %v\n", err)
+	// 	}
+	// }()
 
-	defer batch.Flush(rwTx)
+	// defer batch.Flush(rwTx)
 
-	tds := state.NewTrieDbState(preRoot, batch, blockNum-1)
+	tds := state.NewTrieDbState(preRoot, rwTx, blockNum-1)
 
 	tds.SetResolveReads(false)
 	tds.SetNoHistory(!writeHistory)

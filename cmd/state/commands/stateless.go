@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon/cmd/state/stateless"
+	"github.com/ledgerwatch/log/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -68,8 +70,12 @@ var statelessCmd = &cobra.Command{
 	Short: "Stateless Ethereum prototype",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		createDb := func(path string) (kv.RwDB, error) {
-			return mdbx.MustOpen(path), nil
-
+			db, err := mdbx.NewMDBX(log.New()).
+				Path(path).
+				WriteMap().
+				MapSize(4 * datasize.TB).
+				Open()
+			return db, err
 		}
 		ctx := rootContext()
 
