@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 	"github.com/ledgerwatch/erigon/common"
-	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/stretchr/testify/assert"
@@ -105,7 +105,7 @@ func (m *mockObserver) WillUnloadNode(hex []byte, hash libcommon.Hash) {
 	value := m.unloadedNodes[dictKey]
 	value++
 	m.unloadedNodes[dictKey] = value
-	m.unloadedNodeHashes[dictKey] = common.CopyBytes(hash[:])
+	m.unloadedNodeHashes[dictKey] = libcommon.CopyBytes(hash[:])
 }
 
 func (m *mockObserver) BranchNodeLoaded(hex []byte, incarnation uint64) {

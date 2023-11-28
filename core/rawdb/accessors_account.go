@@ -23,8 +23,8 @@ import (
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 )
 
-func ReadAccount(db kv.Tx, addr libcommon.Address, acc *accounts.Account) (bool, error) {
-	enc, err := db.GetOne(kv.HashedAccounts, addr[:])
+func ReadAccount(db kv.Getter, addr libcommon.Address, acc *accounts.Account) (bool, error) {
+	enc, err := db.GetOne(kv.PlainState, addr[:])
 	if err != nil {
 		return false, err
 	}

@@ -26,7 +26,7 @@ func init() {
 
 type zeroTracer struct {
 	noopTracer // stub struct to mock not used interface methods
-	env        vm.VMInterface
+	env        *vm.EVM
 	tx         types.TxnInfo
 	gasLimit   uint64      // Amount of gas bought for the whole tx
 	interrupt  atomic.Bool // Atomic flag to signal execution interruption
@@ -46,7 +46,7 @@ func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, e
 }
 
 // CaptureStart implements the EVMLogger interface to initialize the tracing operation.
-func (t *zeroTracer) CaptureStart(env vm.VMInterface, from libcommon.Address, to libcommon.Address, precompile, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) {
+func (t *zeroTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to libcommon.Address, precompile, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) {
 	t.to = &to
 	t.env = env
 

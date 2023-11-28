@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"context"
+
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
@@ -74,7 +76,7 @@ var statelessCmd = &cobra.Command{
 				Path(path).
 				WriteMap().
 				MapSize(4 * datasize.TB).
-				Open()
+				Open(context.Background())
 			return db, err
 		}
 		ctx := rootContext()

@@ -24,7 +24,9 @@ import (
 	"github.com/ledgerwatch/erigon/eth/ethconfig/estimate"
 	"github.com/ledgerwatch/erigon/eth/stagedsync/stages"
 	"github.com/ledgerwatch/erigon/turbo/services"
+	"github.com/ledgerwatch/erigon/turbo/silkworm"
 	"github.com/ledgerwatch/erigon/turbo/snapshotsync"
+	"github.com/ledgerwatch/erigon/turbo/snapshotsync/freezeblocks"
 )
 
 type SnapshotsCfg struct {
@@ -38,15 +40,22 @@ type SnapshotsCfg struct {
 	dbEventNotifier    services.DBEventNotifier
 
 	historyV3 bool
+	caplin    bool
 	agg       *state.AggregatorV3
+	silkworm  *silkworm.Silkworm
 }
 
 func StageSnapshotsCfg(db kv.RwDB,
-	chainConfig chain.Config, dirs datadir.Dirs,
+	chainConfig chain.Config,
+	dirs datadir.Dirs,
 	blockRetire services.BlockRetire,
 	snapshotDownloader proto_downloader.DownloaderClient,
-	blockReader services.FullBlockReader, dbEventNotifier services.DBEventNotifier,
-	historyV3 bool, agg *state.AggregatorV3,
+	blockReader services.FullBlockReader,
+	dbEventNotifier services.DBEventNotifier,
+	historyV3 bool,
+	agg *state.AggregatorV3,
+	caplin bool,
+	silkworm *silkworm.Silkworm,
 ) SnapshotsCfg {
 	return SnapshotsCfg{
 		db:                 db,
@@ -57,7 +66,9 @@ func StageSnapshotsCfg(db kv.RwDB,
 		blockReader:        blockReader,
 		dbEventNotifier:    dbEventNotifier,
 		historyV3:          historyV3,
+		caplin:             caplin,
 		agg:                agg,
+		silkworm:           silkworm,
 	}
 }
 
@@ -111,8 +122,12 @@ func DownloadAndIndexSnapshotsIfNeed(s *StageState, ctx context.Context, tx kv.R
 	if !cfg.blockReader.FreezingCfg().Enabled {
 		return nil
 	}
+	cstate := snapshotsync.NoCaplin
+	if cfg.caplin { //TODO(Giulio2002): uncomment
+		cstate = snapshotsync.AlsoCaplin
+	}
 
-	if err := snapshotsync.WaitForDownloader(s.LogPrefix(), ctx, cfg.historyV3, cfg.agg, tx, cfg.blockReader, cfg.dbEventNotifier, &cfg.chainConfig, cfg.snapshotDownloader); err != nil {
+	if err := snapshotsync.WaitForDownloader(s.LogPrefix(), ctx, cfg.historyV3, cstate, cfg.agg, tx, cfg.blockReader, cfg.dbEventNotifier, &cfg.chainConfig, cfg.snapshotDownloader); err != nil {
 		return err
 	}
 
@@ -123,6 +138,12 @@ func DownloadAndIndexSnapshotsIfNeed(s *StageState, ctx context.Context, tx kv.R
 
 	if err := cfg.blockRetire.BuildMissedIndicesIfNeed(ctx, s.LogPrefix(), cfg.dbEventNotifier, &cfg.chainConfig); err != nil {
 		return err
+	}
+
+	if cfg.silkworm != nil {
+		if err := cfg.blockReader.Snapshots().(*freezeblocks.RoSnapshots).AddSnapshotsToSilkworm(cfg.silkworm); err != nil {
+			return err
+		}
 	}
 
 	if cfg.historyV3 {
@@ -300,12 +321,16 @@ func SnapshotsPrune(s *PruneState, initialCycle bool, cfg SnapshotsCfg, ctx cont
 		}
 
 		cfg.blockRetire.RetireBlocksInBackground(ctx, s.ForwardProgress, cfg.chainConfig.Bor != nil, log.LvlInfo, func(downloadRequest []services.DownloadRequest) error {
-			if cfg.snapshotDownloader != nil && !reflect.ValueOf(cfg.snapshotDownloader).IsNil() {
-				if err := snapshotsync.RequestSnapshotsDownload(ctx, downloadRequest, cfg.snapshotDownloader); err != nil {
-					return err
-				}
+			if cfg.snapshotDownloader == nil || reflect.ValueOf(cfg.snapshotDownloader).IsNil() {
+				return nil
 			}
-			return nil
+			return snapshotsync.RequestSnapshotsDownload(ctx, downloadRequest, cfg.snapshotDownloader)
+		}, func(l []string) error {
+			if cfg.snapshotDownloader == nil || reflect.ValueOf(cfg.snapshotDownloader).IsNil() {
+				return nil
+			}
+			_, err := cfg.snapshotDownloader.Delete(ctx, &proto_downloader.DeleteRequest{Paths: l})
+			return err
 		})
 		//cfg.agg.BuildFilesInBackground()
 	}

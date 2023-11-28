@@ -204,6 +204,7 @@ Loop:
 		if req != nil {
 			peer, sentToPeer = cfg.headerReqSend(ctx, req)
 			if sentToPeer {
+				logger.Debug(fmt.Sprintf("[%s] Requested header", logPrefix), "from", req.Number, "length", req.Length)
 				cfg.hd.UpdateStats(req, false /* skeleton */, peer)
 				cfg.hd.UpdateRetryTime(req, currentTime, 5*time.Second /* timeout */)
 			}
@@ -233,6 +234,7 @@ Loop:
 			if req != nil {
 				peer, sentToPeer = cfg.headerReqSend(ctx, req)
 				if sentToPeer {
+					logger.Debug(fmt.Sprintf("[%s] Requested skeleton", logPrefix), "from", req.Number, "length", req.Length)
 					cfg.hd.UpdateStats(req, true /* skeleton */, peer)
 					lastSkeletonTime = time.Now()
 				}
@@ -272,8 +274,8 @@ Loop:
 			stopped = true
 		case <-logEvery.C:
 			progress := cfg.hd.Progress()
-			logProgressHeaders(logPrefix, prevProgress, progress, logger)
 			stats := cfg.hd.ExtractStats()
+			logProgressHeaders(logPrefix, prevProgress, progress, stats, logger)
 			if prevProgress == progress {
 				noProgressCounter++
 			} else {
@@ -298,7 +300,7 @@ Loop:
 		timer.Stop()
 	}
 	if headerInserter.Unwind() {
-		u.UnwindTo(headerInserter.UnwindPoint(), libcommon.Hash{})
+		u.UnwindTo(headerInserter.UnwindPoint(), StagedUnwind)
 	}
 	if headerInserter.GetHighest() != 0 {
 		if !headerInserter.Unwind() {
@@ -374,9 +376,14 @@ func HeadersUnwind(u *UnwindState, s *StageState, tx kv.RwTx, cfg HeadersCfg, te
 		defer tx.Rollback()
 	}
 	// Delete canonical hashes that are being unwound
-	badBlock := u.BadBlock != (libcommon.Hash{})
-	if badBlock {
-		cfg.hd.ReportBadHeader(u.BadBlock)
+	unwindBlock := (u.Reason.Block != nil)
+	if unwindBlock {
+		if u.Reason.IsBadBlock() {
+			cfg.hd.ReportBadHeader(*u.Reason.Block)
+		}
+
+		cfg.hd.UnlinkHeader(*u.Reason.Block)
+
 		// Mark all descendants of bad block as bad too
 		headerCursor, cErr := tx.Cursor(kv.Headers)
 		if cErr != nil {
@@ -397,10 +404,10 @@ func HeadersUnwind(u *UnwindState, s *StageState, tx kv.RwTx, cfg HeadersCfg, te
 			return fmt.Errorf("iterate over headers to mark bad headers: %w", err)
 		}
 	}
-	if err := rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, badBlock); err != nil {
+	if err := rawdb.TruncateCanonicalHash(tx, u.UnwindPoint+1, unwindBlock); err != nil {
 		return err
 	}
-	if badBlock {
+	if unwindBlock {
 		var maxTd big.Int
 		var maxHash libcommon.Hash
 		var maxNum uint64 = 0
@@ -469,20 +476,32 @@ func HeadersUnwind(u *UnwindState, s *StageState, tx kv.RwTx, cfg HeadersCfg, te
 	return nil
 }
 
-func logProgressHeaders(logPrefix string, prev, now uint64, logger log.Logger) uint64 {
+func logProgressHeaders(
+	logPrefix string,
+	prev uint64,
+	now uint64,
+	stats headerdownload.Stats,
+	logger log.Logger,
+) uint64 {
 	speed := float64(now-prev) / float64(logInterval/time.Second)
+
+	var message string
 	if speed == 0 {
-		logger.Info(fmt.Sprintf("[%s] No block headers to write in this log period", logPrefix), "block number", now)
-		return now
+		message = "No block headers to write in this log period"
+	} else {
+		message = "Wrote block headers"
 	}
 
 	var m runtime.MemStats
 	dbg.ReadMemStats(&m)
-	logger.Info(fmt.Sprintf("[%s] Wrote block headers", logPrefix),
+	logger.Info(fmt.Sprintf("[%s] %s", logPrefix, message),
 		"number", now,
 		"blk/second", speed,
 		"alloc", libcommon.ByteCount(m.Alloc),
-		"sys", libcommon.ByteCount(m.Sys))
+		"sys", libcommon.ByteCount(m.Sys),
+		"invalidHeaders", stats.InvalidHeaders,
+		"rejectedBadHeaders", stats.RejectedBadHeaders,
+	)
 
 	return now
 }
@@ -550,4 +569,12 @@ func (cr ChainReaderImpl) BorEventsByBlock(hash libcommon.Hash, number uint64) [
 		return nil
 	}
 	return events
+}
+func (cr ChainReaderImpl) BorSpan(spanId uint64) []byte {
+	span, err := cr.blockReader.Span(context.Background(), cr.tx, spanId)
+	if err != nil {
+		cr.logger.Error("BorSpan failed", "err", err)
+		return nil
+	}
+	return span
 }

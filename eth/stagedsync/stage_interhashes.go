@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 	"math/bits"
 	"sync/atomic"
 
@@ -20,8 +21,6 @@ import (
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/exp/slices"
 
-	"github.com/ledgerwatch/erigon/common"
-	"github.com/ledgerwatch/erigon/common/dbutils"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -136,7 +135,7 @@ func SpawnIntermediateHashesStage(s *StageState, u Unwinder, tx kv.RwTx, cfg Tri
 		if to > s.BlockNumber {
 			unwindTo := (to + s.BlockNumber) / 2 // Binary search for the correct block, biased to the lower numbers
 			logger.Warn("Unwinding due to incorrect root hash", "to", unwindTo)
-			u.UnwindTo(unwindTo, headerHash)
+			u.UnwindTo(unwindTo, BadBlock(headerHash, fmt.Errorf("Incorrect root hash")))
 		}
 	} else if err = s.Update(tx, to); err != nil {
 		return trie.EmptyRoot, err
@@ -229,11 +228,11 @@ func (p *HashPromoter) PromoteOnHistoryV3(logPrefix string, from, to uint64, sto
 			if err != nil {
 				return err
 			}
-			addrHash, err := common.HashData(k[:length.Addr])
+			addrHash, err := libcommon.HashData(k[:length.Addr])
 			if err != nil {
 				return err
 			}
-			secKey, err := common.HashData(k[length.Addr:])
+			secKey, err := libcommon.HashData(k[length.Addr:])
 			if err != nil {
 				return err
 			}

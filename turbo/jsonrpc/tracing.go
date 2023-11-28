@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
@@ -18,7 +17,7 @@ import (
 	"github.com/ledgerwatch/erigon/cmd/state/stateless"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 
-	"github.com/ledgerwatch/erigon/common/hexutil"
+	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon/common/math"
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -31,6 +30,8 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+
+	jsoniter "github.com/json-iterator/go"
 )
 
 // TraceBlockByNumber implements debug_traceBlockByNumber. Returns Geth style block traces.
@@ -341,7 +342,7 @@ func (api *PrivateDebugAPIImpl) TraceCall(ctx context.Context, args ethapi.CallA
 	}
 	engine := api.engine()
 
-	blockNumber, hash, _, err := rpchelper.GetBlockNumber(blockNrOrHash, dbtx, api.filters)
+	blockNumber, hash, isLatest, err := rpchelper.GetBlockNumber(blockNrOrHash, dbtx, api.filters)
 	if err != nil {
 		return fmt.Errorf("get block number: %v", err)
 	}
@@ -351,7 +352,12 @@ func (api *PrivateDebugAPIImpl) TraceCall(ctx context.Context, args ethapi.CallA
 		return err
 	}
 
-	stateReader, err := rpchelper.CreateStateReader(ctx, dbtx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(dbtx), chainConfig.ChainName)
+	var stateReader state.StateReader
+	if config.TxIndex == nil || isLatest {
+		stateReader, err = rpchelper.CreateStateReader(ctx, dbtx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(dbtx), chainConfig.ChainName)
+	} else {
+		stateReader, err = rpchelper.CreateHistoryStateReader(dbtx, blockNumber, int(*config.TxIndex), api.historyV3(dbtx), chainConfig.ChainName)
+	}
 	if err != nil {
 		return fmt.Errorf("create state reader: %v", err)
 	}

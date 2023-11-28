@@ -8,13 +8,13 @@ import (
 	"time"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"github.com/ledgerwatch/erigon-lib/common/length"
 	"github.com/ledgerwatch/erigon-lib/kv"
+	"github.com/ledgerwatch/erigon-lib/metrics"
 	"github.com/ledgerwatch/erigon/common"
-	"github.com/ledgerwatch/erigon/common/hexutil"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
 	"github.com/ledgerwatch/erigon/ethdb"
-	"github.com/ledgerwatch/erigon/metrics"
 	"github.com/ledgerwatch/erigon/turbo/rlphacks"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -203,7 +203,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c kv.Cursor, ih *IHCursor2, first boo
 				return err
 			}
 			if isIHSequence {
-				fstl.k = common.CopyBytes(fstl.ihK)
+				fstl.k = libcommon.CopyBytes(fstl.ihK)
 			} else {
 				if fstl.k, fstl.v, err = c.Seek(dbPrefix); err != nil {
 					return err
@@ -365,7 +365,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c kv.Cursor, ih *IHCursor2, first boo
 		return err
 	}
 	if isIHSequence {
-		fstl.k = common.CopyBytes(fstl.ihK)
+		fstl.k = libcommon.CopyBytes(fstl.ihK)
 		return nil
 	}
 	if fstl.k, fstl.v, err = c.Seek(next); err != nil {
@@ -582,7 +582,7 @@ func (dr *DefaultReceiver) Result() SubTries {
 }
 
 func (fstl *FlatDbSubTrieLoader) LoadSubTries() (SubTries, error) {
-	defer trieFlatDbSubTrieLoaderTimer.UpdateDuration(time.Now())
+	defer trieFlatDbSubTrieLoaderTimer.ObserveDuration(time.Now())
 	if len(fstl.dbPrefixes) == 0 {
 		return SubTries{}, nil
 	}

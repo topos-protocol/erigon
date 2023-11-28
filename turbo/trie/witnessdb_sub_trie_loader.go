@@ -5,7 +5,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/ledgerwatch/erigon/metrics"
+	"github.com/ledgerwatch/erigon-lib/metrics"
 )
 
 var (
@@ -20,7 +20,7 @@ func NewWitnessDbSubTrieLoader() *WitnessDbSubTrieLoader {
 }
 
 func (wstl *WitnessDbSubTrieLoader) LoadSubTries(db WitnessStorage, blockNr uint64, trieLimit uint32, startPos int64, count int) (SubTries, int64, error) {
-	defer trieWitnessDbSubTrieLoaderTimer.UpdateDuration(time.Now())
+	defer trieWitnessDbSubTrieLoaderTimer.ObserveDuration(time.Now())
 
 	serializedWitness, err := db.GetWitnessesForBlock(blockNr, trieLimit)
 	if err != nil {

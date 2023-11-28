@@ -14,7 +14,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/kvcfg"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
-	"github.com/ledgerwatch/erigon-lib/kv/memdb"
+	"github.com/ledgerwatch/erigon-lib/kv/membatchwithdb"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -216,7 +216,7 @@ func (p *ExportFileBlockProvider) WriteHeader(h *types.Header) {
 		}
 		defer tx.Rollback()
 
-		batch := memdb.NewMemoryBatch(tx, "")
+		batch := membatchwithdb.NewMemoryBatch(tx, "")
 		defer batch.Rollback()
 		if err != nil {
 			panic(fmt.Errorf("error opening batch: %w", err))
@@ -303,7 +303,7 @@ func (p *ExportFileBlockProvider) GetHeader(h common.Hash, i uint64) *types.Head
 
 		defer tx.Rollback()
 
-		batch := memdb.NewMemoryBatch(tx, "")
+		batch := membatchwithdb.NewMemoryBatch(tx, "")
 		defer batch.Rollback()
 		if err != nil {
 			panic(fmt.Errorf("error opening batch: %w", err))
