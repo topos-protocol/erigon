@@ -602,14 +602,8 @@ func GenesisToBlock(g *types.Genesis, tmpDir string) (*types.Block, *state.Intra
 			}
 		}
 
-		if ethconfig.EnableStateless {
-			if err = statedb.SoftFinalizeTx(&chain.Rules{}, w); err != nil {
-				return
-			}
-		} else {
-			if err = statedb.FinalizeTx(&chain.Rules{}, w); err != nil {
-				return
-			}
+		if err = statedb.FinalizeTx(&chain.Rules{}, w); err != nil {
+			return
 		}
 		if root, err = trie.CalcRoot("genesis", tx); err != nil {
 			return
