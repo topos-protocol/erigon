@@ -175,7 +175,7 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		stream.Flush()
 	}
 
-	if *config.Tracer == "zeroTracer" {
+	if config.Tracer != nil && *config.Tracer == "zeroTracer" {
 		if len(txns) != 0 {
 			stream.WriteMore()
 		}

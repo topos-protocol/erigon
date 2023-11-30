@@ -9,7 +9,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring/roaring64"
 	"github.com/holiman/uint256"
-	"github.com/ledgerwatch/erigon-lib/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon-lib/kv/bitmapdb"
 	"github.com/ledgerwatch/erigon-lib/kv/temporal/historyv2"
@@ -34,9 +34,9 @@ func NewDbStateWriter(db putDel, blockNr uint64) *DbStateWriter {
 
 type DbStateWriter struct {
 	db      putDel
-	pw      *PreimageWriter
 	blockNr uint64
 	csw     *ChangeSetWriter
+	legacy  bool
 }
 
 func (dsw *DbStateWriter) ChangeSetWriter() *ChangeSetWriter {
@@ -62,11 +62,11 @@ func originalAccountData(original *accounts.Account, omitHashes bool) []byte {
 	return originalData
 }
 
-func (dsw *DbStateWriter) UpdateAccountData(address common.Address, original, account *accounts.Account) error {
+func (dsw *DbStateWriter) UpdateAccountData(address libcommon.Address, original, account *accounts.Account) error {
 	if err := dsw.csw.UpdateAccountData(address, original, account); err != nil {
 		return err
 	}
-	addrHash, err := common.HashData(address[:])
+	addrHash, err := libcommon.HashData(address[:])
 	if err != nil {
 		return err
 	}
@@ -78,29 +78,28 @@ func (dsw *DbStateWriter) UpdateAccountData(address common.Address, original, ac
 	return nil
 }
 
-func (dsw *DbStateWriter) DeleteAccount(address common.Address, original *accounts.Account) error {
+func (dsw *DbStateWriter) DeleteAccount(address libcommon.Address, original *accounts.Account) error {
 	if err := dsw.csw.DeleteAccount(address, original); err != nil {
 		return err
 	}
-	addrHash, err := common.HashData(address[:])
+	addrHash, err := libcommon.HashData(address[:])
 	if err != nil {
 		return err
 	}
-	// addr := common.BytesToAddress(addrHash[:])
 	if err := dsw.db.Delete(kv.HashedAccounts, addrHash[:]); err != nil {
 		return err
 	}
 	if original.Incarnation > 0 {
 		var b [8]byte
 		binary.BigEndian.PutUint64(b[:], original.Incarnation)
-		if err := dsw.db.Put(kv.IncarnationMap, addrHash[:], b[:]); err != nil {
+		if err := dsw.db.Put(kv.IncarnationMap, address[:], b[:]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (dsw *DbStateWriter) UpdateAccountCode(address common.Address, incarnation uint64, codeHash common.Hash, code []byte) error {
+func (dsw *DbStateWriter) UpdateAccountCode(address libcommon.Address, incarnation uint64, codeHash libcommon.Hash, code []byte) error {
 	if err := dsw.csw.UpdateAccountCode(address, incarnation, codeHash, code); err != nil {
 		return err
 	}
@@ -108,7 +107,7 @@ func (dsw *DbStateWriter) UpdateAccountCode(address common.Address, incarnation 
 	if err := dsw.db.Put(kv.Code, codeHash[:], code); err != nil {
 		return err
 	}
-	addrHash, err := common.HashData(address.Bytes())
+	addrHash, err := libcommon.HashData(address.Bytes())
 	if err != nil {
 		return err
 	}
@@ -119,7 +118,7 @@ func (dsw *DbStateWriter) UpdateAccountCode(address common.Address, incarnation 
 	return nil
 }
 
-func (dsw *DbStateWriter) WriteAccountStorage(address common.Address, incarnation uint64, key *common.Hash, original, value *uint256.Int) error {
+func (dsw *DbStateWriter) WriteAccountStorage(address libcommon.Address, incarnation uint64, key *libcommon.Hash, original, value *uint256.Int) error {
 	// We delegate here first to let the changeSetWrite make its own decision on whether to proceed in case *original == *value
 	if err := dsw.csw.WriteAccountStorage(address, incarnation, key, original, value); err != nil {
 		return err
@@ -127,24 +126,33 @@ func (dsw *DbStateWriter) WriteAccountStorage(address common.Address, incarnatio
 	if *original == *value {
 		return nil
 	}
-	seckey, err := common.HashData(key[:])
+	seckey, err := libcommon.HashData(key[:])
 	if err != nil {
 		return err
 	}
-	addrHash, err := common.HashData(address[:])
+	addrHash, err := libcommon.HashData(address[:])
 	if err != nil {
 		return err
 	}
 	compositeKey := dbutils2.GenerateCompositeStorageKey(addrHash, incarnation, seckey)
 
 	v := value.Bytes()
-	if len(v) == 0 {
-		return dsw.db.Delete(kv.HashedAccounts, compositeKey)
+
+	var table string
+
+	if dsw.legacy {
+		table = kv.HashedAccounts
+	} else {
+		table = kv.HashedStorage
 	}
-	return dsw.db.Put(kv.HashedAccounts, compositeKey, v)
+
+	if len(v) == 0 {
+		return dsw.db.Delete(table, compositeKey)
+	}
+	return dsw.db.Put(table, compositeKey, v)
 }
 
-func (dsw *DbStateWriter) CreateContract(address common.Address) error {
+func (dsw *DbStateWriter) CreateContract(address libcommon.Address) error {
 	if err := dsw.csw.CreateContract(address); err != nil {
 		return err
 	}
@@ -194,7 +202,7 @@ func writeIndex(blocknum uint64, changes *historyv2.ChangeSet, bucket string, ch
 			if _, err = chunk.WriteTo(buf); err != nil {
 				return err
 			}
-			return changeDb.Put(bucket, chunkKey, common.CopyBytes(buf.Bytes()))
+			return changeDb.Put(bucket, chunkKey, libcommon.CopyBytes(buf.Bytes()))
 		}); err != nil {
 			return err
 		}

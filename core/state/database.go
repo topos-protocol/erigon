@@ -1237,7 +1237,7 @@ func (tds *TrieDbState) TrieStateWriter() *TrieStateWriter {
 
 // DbStateWriter creates a writer that is designed to write changes into the database batch
 func (tds *TrieDbState) DbStateWriter() *DbStateWriter {
-	return &DbStateWriter{blockNr: tds.blockNr, db: tds.db, pw: tds.pw, csw: NewChangeSetWriter()}
+	return &DbStateWriter{blockNr: tds.blockNr, db: tds.db, csw: NewChangeSetWriter(), legacy: true}
 }
 
 // DbStateWriter creates a writer that is designed to write changes into the database batch

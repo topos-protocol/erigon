@@ -52,7 +52,7 @@ func (t *zeroTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to libcom
 
 	t.addAccountToTrace(from, false)
 	t.addAccountToTrace(to, false)
-	t.addAccountToTrace(env.Context().Coinbase, false)
+	t.addAccountToTrace(env.Context.Coinbase, false)
 
 	// The recipient balance includes the value transferred.
 	toBal := new(big.Int).Sub(t.tx.Traces[to].Balance.ToBig(), value.ToBig())
@@ -61,7 +61,7 @@ func (t *zeroTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to libcom
 	// The sender balance is after reducing: value and gasLimit.
 	// We need to re-add them to get the pre-tx balance.
 	fromBal := new(big.Int).Set(t.tx.Traces[from].Balance.ToBig())
-	gasPrice := env.TxContext().GasPrice
+	gasPrice := env.TxContext.GasPrice
 	consumedGas := new(big.Int).Mul(gasPrice.ToBig(), new(big.Int).SetUint64(t.gasLimit))
 	fromBal.Add(fromBal, new(big.Int).Add(value.ToBig(), consumedGas))
 	t.tx.Traces[from].Balance = uint256.MustFromBig(fromBal)
@@ -219,7 +219,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 
 	// if the transaction created a contract, store the creation address in the receipt.
 	if t.to == nil {
-		receipt.ContractAddress = crypto.CreateAddress(t.env.TxContext().Origin, t.ctx.Txn.GetNonce())
+		receipt.ContractAddress = crypto.CreateAddress(t.env.TxContext.Origin, t.ctx.Txn.GetNonce())
 	}
 	// Set the receipt logs and create a bloom for filtering
 	receipt.Logs = t.env.IntraBlockState().GetLogs(t.ctx.Txn.Hash())
