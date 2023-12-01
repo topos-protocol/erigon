@@ -18,6 +18,8 @@ import (
 	"github.com/ledgerwatch/log/v3"
 )
 
+var emptyCodeHash = crypto.Keccak256(nil)
+
 //go:generate go run github.com/fjl/gencodec -type account -field-override accountMarshaling -out gen_account_json.go
 
 func init() {
@@ -191,7 +193,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			changed = true
 		}
 
-		if !bytes.Equal(codeHash[:], trace.CodeUsage.Read[:]) {
+		if !bytes.Equal(codeHash[:], emptyCodeHash) && !bytes.Equal(codeHash[:], trace.CodeUsage.Read[:]) {
 			trace.CodeUsage.Read = nil
 			trace.CodeUsage.Write = code
 			changed = true
