@@ -319,7 +319,7 @@ func Stateless(
 		fmt.Printf("Block number: %d, root: %x\n", blockNum-1, preRoot)
 
 		trace := blockNum == 50492 // false // blockNum == 545080
-		tds.SetResolveReads(blockNum >= witnessThreshold)
+		tds.SetResolveReads(true)
 		block, err := blockProvider.NextBlock()
 		check(err)
 		if block == nil {
@@ -415,40 +415,40 @@ func Stateless(
 				fmt.Printf("Failed to resolve state trie: %v\n", err)
 				return
 			}
-			if len(resolveWitnesses) > 0 {
+			if len(resolveWitnesses) > 0 && blockNum >= witnessThreshold {
 				fmt.Printf("Upserting witnesses for block %d\n", blockNum)
 				witnessDBWriter.MustUpsert(blockNum, uint32(state.MaxTrieCacheSize), resolveWitnesses)
 			}
 		}
 		execTime2 := time.Since(execStart)
 		blockWitness = nil
-		if blockNum >= witnessThreshold {
-			// Witness has to be extracted before the state trie is modified
-			var blockWitnessStats *trie.BlockWitnessStats
-			bw, err = tds.ExtractWitness(trace, binary /* is binary */)
-			if err != nil {
-				fmt.Printf("error extracting witness for block %d: %v\n", blockNum, err)
-				return
-			}
 
-			witnessDBWriter.MustUpsertOneWitness(blockNum, bw)
-
-			var buf bytes.Buffer
-			blockWitnessStats, err = bw.WriteInto(&buf)
-			if err != nil {
-				fmt.Printf("error extracting witness for block %d: %v\n", blockNum, err)
-				return
-			}
-			blockWitness = buf.Bytes()
-			err = stats.AddRow(blockNum, blockWitnessStats)
-			check(err)
+		// Witness has to be extracted before the state trie is modified
+		var blockWitnessStats *trie.BlockWitnessStats
+		bw, err = tds.ExtractWitness(trace, binary /* is binary */)
+		if err != nil {
+			fmt.Printf("error extracting witness for block %d: %v\n", blockNum, err)
+			return
 		}
+
+		if blockNum >= witnessThreshold {
+			witnessDBWriter.MustUpsertOneWitness(blockNum, bw)
+		}
+
+		var buf bytes.Buffer
+		blockWitnessStats, err = bw.WriteInto(&buf)
+		if err != nil {
+			fmt.Printf("error extracting witness for block %d: %v\n", blockNum, err)
+			return
+		}
+		blockWitness = buf.Bytes()
+		err = stats.AddRow(blockNum, blockWitnessStats)
+		check(err)
+
 		finalRootFail := false
 		execStart = time.Now()
 
-		// fmt.Printf("Block number: %d, witnesses hex: %x\n", blockNum, blockWitness)
-
-		if blockNum >= witnessThreshold && blockWitness != nil { // blockWitness == nil means the extraction fails
+		if blockWitness != nil { // blockWitness == nil means the extraction fails
 
 			var s *state.Stateless
 			var w *trie.Witness
