@@ -27,15 +27,16 @@ func init() {
 }
 
 type zeroTracer struct {
-	noopTracer // stub struct to mock not used interface methods
-	env        *vm.EVM
-	tx         types.TxnInfo
-	gasLimit   uint64      // Amount of gas bought for the whole tx
-	interrupt  atomic.Bool // Atomic flag to signal execution interruption
-	reason     error       // Textual reason for the interruption
-	ctx        *tracers.Context
-	to         *libcommon.Address
-	txStatus   uint64
+	noopTracer     // stub struct to mock not used interface methods
+	env            *vm.EVM
+	tx             types.TxnInfo
+	gasLimit       uint64      // Amount of gas bought for the whole tx
+	interrupt      atomic.Bool // Atomic flag to signal execution interruption
+	reason         error       // Textual reason for the interruption
+	ctx            *tracers.Context
+	to             *libcommon.Address
+	txStatus       uint64
+	selfDestructed map[libcommon.Address]struct{}
 }
 
 func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, error) {
@@ -43,7 +44,8 @@ func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, e
 		tx: types.TxnInfo{
 			Traces: make(map[libcommon.Address]*types.TxnTrace),
 		},
-		ctx: ctx,
+		ctx:            ctx,
+		selfDestructed: make(map[libcommon.Address]struct{}),
 	}, nil
 }
 
@@ -102,6 +104,9 @@ func (t *zeroTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, sco
 	case stackLen >= 1 && (op == vm.EXTCODECOPY || op == vm.EXTCODEHASH || op == vm.EXTCODESIZE || op == vm.BALANCE || op == vm.SELFDESTRUCT):
 		addr := libcommon.Address(stackData[stackLen-1].Bytes20())
 		t.addAccountToTrace(addr, false)
+		if op == vm.SELFDESTRUCT {
+			t.selfDestructed[addr] = struct{}{}
+		}
 	case stackLen >= 5 && (op == vm.DELEGATECALL || op == vm.CALL || op == vm.STATICCALL || op == vm.CALLCODE):
 		addr := libcommon.Address(stackData[stackLen-2].Bytes20())
 		t.addAccountToTrace(addr, false)
@@ -161,7 +166,9 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 		codeHash := t.env.IntraBlockState().GetCodeHash(addr)
 		code := t.env.IntraBlockState().GetCode(addr)
 
-		changed := false
+		_, selfDestrcuted := t.selfDestructed[addr]
+
+		changed := false || selfDestrcuted
 
 		if newBalance.Cmp(trace.Balance) != 0 {
 			trace.Balance = newBalance
