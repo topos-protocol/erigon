@@ -171,14 +171,14 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 		changed := false || selfDestrcuted
 
 		if newBalance.Cmp(trace.Balance) != 0 {
-			trace.Balance = newBalance
+			trace.Balance = newBalance.Clone()
 			changed = true
 		} else {
 			trace.Balance = nil
 		}
 
 		if newNonce.Cmp(trace.Nonce) != 0 {
-			trace.Nonce = newNonce
+			trace.Nonce = newNonce.Clone()
 			changed = true
 		} else {
 			trace.Nonce = nil
@@ -202,10 +202,11 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 
 		if !bytes.Equal(codeHash[:], emptyCodeHash) && !bytes.Equal(codeHash[:], trace.CodeUsage.Read[:]) {
 			trace.CodeUsage.Read = nil
-			trace.CodeUsage.Write = code
+			trace.CodeUsage.Write = bytes.Clone(code)
 			changed = true
 		} else if code != nil {
-			trace.CodeUsage.Read = &codeHash
+			codeHashCopy := libcommon.BytesToHash(codeHash.Bytes())
+			trace.CodeUsage.Read = &codeHashCopy
 		}
 
 		if trace.CodeUsage.Read != nil && code == nil {
