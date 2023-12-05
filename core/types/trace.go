@@ -24,6 +24,7 @@ type TxnTrace struct {
 	StorageRead    []libcommon.Hash                `json:"storage_read,omitempty"`
 	StorageWritten map[libcommon.Hash]*uint256.Int `json:"storage_written,omitempty"`
 	CodeUsage      *ContractCodeUsage              `json:"code_usage,omitempty"`
+	SelfDestructed *bool                           `json:"self_destructed,omitempty"`
 	StorageReadMap map[libcommon.Hash]struct{}     `json:"-"`
 }
 

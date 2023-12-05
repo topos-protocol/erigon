@@ -27,16 +27,15 @@ func init() {
 }
 
 type zeroTracer struct {
-	noopTracer     // stub struct to mock not used interface methods
-	env            *vm.EVM
-	tx             types.TxnInfo
-	gasLimit       uint64      // Amount of gas bought for the whole tx
-	interrupt      atomic.Bool // Atomic flag to signal execution interruption
-	reason         error       // Textual reason for the interruption
-	ctx            *tracers.Context
-	to             *libcommon.Address
-	txStatus       uint64
-	selfDestructed map[libcommon.Address]struct{}
+	noopTracer // stub struct to mock not used interface methods
+	env        *vm.EVM
+	tx         types.TxnInfo
+	gasLimit   uint64      // Amount of gas bought for the whole tx
+	interrupt  atomic.Bool // Atomic flag to signal execution interruption
+	reason     error       // Textual reason for the interruption
+	ctx        *tracers.Context
+	to         *libcommon.Address
+	txStatus   uint64
 }
 
 func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, error) {
@@ -44,8 +43,7 @@ func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, e
 		tx: types.TxnInfo{
 			Traces: make(map[libcommon.Address]*types.TxnTrace),
 		},
-		ctx:            ctx,
-		selfDestructed: make(map[libcommon.Address]struct{}),
+		ctx: ctx,
 	}, nil
 }
 
@@ -104,9 +102,6 @@ func (t *zeroTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, sco
 	case stackLen >= 1 && (op == vm.EXTCODECOPY || op == vm.EXTCODEHASH || op == vm.EXTCODESIZE || op == vm.BALANCE || op == vm.SELFDESTRUCT):
 		addr := libcommon.Address(stackData[stackLen-1].Bytes20())
 		t.addAccountToTrace(addr, false)
-		if op == vm.SELFDESTRUCT {
-			t.selfDestructed[addr] = struct{}{}
-		}
 	case stackLen >= 5 && (op == vm.DELEGATECALL || op == vm.CALL || op == vm.STATICCALL || op == vm.CALLCODE):
 		addr := libcommon.Address(stackData[stackLen-2].Bytes20())
 		t.addAccountToTrace(addr, false)
@@ -157,18 +152,15 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 	t.tx.Meta.GasUsed = t.gasLimit - restGas
 	*t.ctx.CumulativeGasUsed += t.tx.Meta.GasUsed
 
-	toPop := make([]libcommon.Address, 0)
-
 	for addr := range t.tx.Traces {
 		trace := t.tx.Traces[addr]
 		newBalance := t.env.IntraBlockState().GetBalance(addr)
 		newNonce := uint256.NewInt(t.env.IntraBlockState().GetNonce(addr))
 		codeHash := t.env.IntraBlockState().GetCodeHash(addr)
 		code := t.env.IntraBlockState().GetCode(addr)
+		hasSelfDestructed := t.env.IntraBlockState().HasSelfdestructed(addr)
 
-		_, selfDestrcuted := t.selfDestructed[addr]
-
-		changed := false || selfDestrcuted
+		changed := false
 
 		if newBalance.Cmp(trace.Balance) != 0 {
 			trace.Balance = newBalance.Clone()
@@ -213,13 +205,16 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			trace.CodeUsage = nil
 		}
 
-		if !changed {
-			toPop = append(toPop, addr)
+		if hasSelfDestructed {
+			trace.SelfDestructed = new(bool)
+			*trace.SelfDestructed = true
+			changed = true
 		}
-	}
 
-	for _, addr := range toPop {
-		delete(t.tx.Traces, addr)
+		// If an account is not changed but only read, we put an empty object in the trace
+		if !changed {
+			t.tx.Traces[addr] = &types.TxnTrace{}
+		}
 	}
 
 	receipt := &types.Receipt{Type: t.ctx.Txn.Type(), CumulativeGasUsed: *t.ctx.CumulativeGasUsed}
