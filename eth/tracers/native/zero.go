@@ -160,18 +160,14 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 		code := t.env.IntraBlockState().GetCode(addr)
 		hasSelfDestructed := t.env.IntraBlockState().HasSelfdestructed(addr)
 
-		changed := false
-
 		if newBalance.Cmp(trace.Balance) != 0 {
 			trace.Balance = newBalance.Clone()
-			changed = true
 		} else {
 			trace.Balance = nil
 		}
 
 		if newNonce.Cmp(trace.Nonce) != 0 {
 			trace.Nonce = newNonce.Clone()
-			changed = true
 		} else {
 			trace.Nonce = nil
 		}
@@ -181,26 +177,23 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			for k := range trace.StorageReadMap {
 				trace.StorageRead = append(trace.StorageRead, k)
 			}
-			changed = true
 		} else {
 			trace.StorageRead = nil
 		}
 
 		if len(trace.StorageWritten) == 0 {
 			trace.StorageWritten = nil
-		} else {
-			changed = true
 		}
 
 		if !bytes.Equal(codeHash[:], emptyCodeHash) && !bytes.Equal(codeHash[:], trace.CodeUsage.Read[:]) {
 			trace.CodeUsage.Read = nil
 			trace.CodeUsage.Write = bytes.Clone(code)
-			changed = true
 		} else if code != nil {
 			codeHashCopy := libcommon.BytesToHash(codeHash.Bytes())
 			trace.CodeUsage.Read = &codeHashCopy
 		}
 
+		// When the code is empty for this account, we don't need to store the code usage
 		if trace.CodeUsage.Read != nil && code == nil {
 			trace.CodeUsage = nil
 		}
@@ -208,12 +201,6 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 		if hasSelfDestructed {
 			trace.SelfDestructed = new(bool)
 			*trace.SelfDestructed = true
-			changed = true
-		}
-
-		// If an account is not changed but only read, we put an empty object in the trace
-		if !changed {
-			t.tx.Traces[addr] = &types.TxnTrace{}
 		}
 	}
 
