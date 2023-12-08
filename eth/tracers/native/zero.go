@@ -194,7 +194,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 		}
 
 		// When the code is empty for this account, we don't need to store the code usage
-		if trace.CodeUsage.Read != nil && code == nil {
+		if code == nil {
 			trace.CodeUsage = nil
 		}
 
