@@ -183,6 +183,13 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 
 		if len(trace.StorageWritten) == 0 {
 			trace.StorageWritten = nil
+		} else {
+			// A slot write could be reverted if the transaction is reverted. We will need to read the value from the statedb again to get the correct value.
+			for k := range trace.StorageWritten {
+				var value uint256.Int
+				t.env.IntraBlockState().GetState(addr, &k, &value)
+				trace.StorageWritten[k] = &value
+			}
 		}
 
 		if !bytes.Equal(codeHash[:], emptyCodeHash) && !bytes.Equal(codeHash[:], trace.CodeUsage.Read[:]) {
