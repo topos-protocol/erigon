@@ -224,7 +224,10 @@ func Stateless(
 	check(err)
 	defer db.Close()
 
+	genesis = core.DeveloperGenesisBlock(0, core.DevnetEtherbase)
 	chainConfig := genesis.Config
+
+	fmt.Printf("Genesis: %+v\n", genesis)
 
 	var preRoot common.Hash
 	if blockNum == 1 {
@@ -371,6 +374,14 @@ func Stateless(
 		if len(block.Transactions()) == 0 {
 			statedb.GetBalance(common.HexToAddress("0x1234"))
 		}
+
+		fmt.Println("> Checking the genesis state...")
+
+		balance1 := statedb.GetBalance(common.HexToAddress("0x67b1d87101671b127f5f8714789C7192f7ad340e"))
+		fmt.Printf("Balance of 0x67b1d87101671b127f5f8714789C7192f7ad340e: %d\n", balance1)
+
+		balance2 := statedb.GetBalance(common.HexToAddress("0xa94f5374Fce5edBC8E2a8697C15331677e6EbF0B"))
+		fmt.Printf("Balance of 0xa94f5374Fce5edBC8E2a8697C15331677e6EbF0B: %d\n", balance2)
 
 		fmt.Printf("current block number=%d hash=%s root=%s\n", block.Number().Uint64(), block.Hash().String(), block.Header().Root.String())
 
