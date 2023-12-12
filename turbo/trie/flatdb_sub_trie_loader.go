@@ -23,7 +23,7 @@ var (
 	trieFlatDbSubTrieLoaderTimer = metrics.NewHistTimer("trie_subtrieloader_flatdb")
 )
 
-type StreamReceiver interface {
+type StreamReceiver[T any] interface {
 	Receive(
 		itemType StreamItem,
 		accountKey []byte,
@@ -35,8 +35,8 @@ type StreamReceiver interface {
 		cutoff int,
 	) error
 
-	Result() SubTries
-	Root() libcommon.Hash
+	Result() T
+	EmptyResult() T
 }
 
 type FlatDbSubTrieLoader struct {
@@ -66,7 +66,7 @@ type FlatDbSubTrieLoader struct {
 	hashValue    []byte
 	streamCutoff int
 
-	receiver        StreamReceiver
+	receiver        StreamReceiver[SubTries]
 	defaultReceiver *DefaultReceiver
 	hc              HashCollector
 }
@@ -141,7 +141,7 @@ func (fstl *FlatDbSubTrieLoader) Reset(db kv.RwTx, rl RetainDecider, receiverDec
 	return nil
 }
 
-func (fstl *FlatDbSubTrieLoader) SetStreamReceiver(receiver StreamReceiver) {
+func (fstl *FlatDbSubTrieLoader) SetStreamReceiver(receiver StreamReceiver[SubTries]) {
 	fstl.receiver = receiver
 }
 
@@ -385,6 +385,10 @@ func (fstl *FlatDbSubTrieLoader) iteration(c kv.Cursor, ih *IHCursor2, first boo
 		fmt.Printf("k after next: %x\n", fstl.k)
 	}
 	return nil
+}
+
+func (dr *DefaultReceiver) EmptyResult() SubTries {
+	return SubTries{}
 }
 
 func (dr *DefaultReceiver) Reset(rl RetainDecider, hc HashCollector, trace bool) {

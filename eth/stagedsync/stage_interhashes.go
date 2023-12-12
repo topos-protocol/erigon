@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 	"math/bits"
 	"sync/atomic"
+
+	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
@@ -168,8 +169,8 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	defer stTrieCollector.Close()
 	stTrieCollectorFunc := storageTrieCollector(stTrieCollector)
 
-	loader := trie.NewFlatDBTrieLoader(logPrefix, trie.NewRetainList(0), accTrieCollectorFunc, stTrieCollectorFunc, false)
-	hash, err := loader.CalcTrieRoot(db, ctx.Done())
+	loader := trie.NewFlatDBTrieLoader(logPrefix, trie.NewRetainList(0), accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false))
+	hash, err := loader.Result(db, ctx.Done())
 	if err != nil {
 		return trie.EmptyRoot, err
 	}
@@ -605,8 +606,8 @@ func IncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to
 	defer stTrieCollector.Close()
 	stTrieCollectorFunc := storageTrieCollector(stTrieCollector)
 
-	loader := trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false)
-	hash, err := loader.CalcTrieRoot(db, quit)
+	loader := trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false))
+	hash, err := loader.Result(db, quit)
 	if err != nil {
 		return trie.EmptyRoot, err
 	}
@@ -659,7 +660,7 @@ func UnwindIntermediateHashesStage(u *UnwindState, s *StageState, tx kv.RwTx, cf
 	return nil
 }
 
-func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, accTrieCollectorFunc trie.HashCollector2, stTrieCollectorFunc trie.StorageHashCollector2, quit <-chan struct{}, logger log.Logger) (*trie.FlatDBTrieLoader, error) {
+func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, accTrieCollectorFunc trie.HashCollector2, stTrieCollectorFunc trie.StorageHashCollector2, quit <-chan struct{}, logger log.Logger) (*trie.FlatDBTrieLoader[libcommon.Hash], error) {
 	p := NewHashPromoter(db, cfg.tmpDir, quit, logPrefix, logger)
 	if cfg.historyV3 {
 		collect := func(k, v []byte) {
@@ -684,7 +685,7 @@ func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList
 		}
 	}
 
-	return trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false), nil
+	return trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false)), nil
 }
 
 func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, expectedRootHash libcommon.Hash, quit <-chan struct{}, logger log.Logger) error {
@@ -703,7 +704,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 		return err
 	}
 
-	hash, err := loader.CalcTrieRoot(db, quit)
+	hash, err := loader.Result(db, quit)
 	if err != nil {
 		return err
 	}

@@ -350,7 +350,7 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 	}
 
 	rl := trie.NewRetainList(0)
-	var loader *trie.FlatDBTrieLoader
+	var loader *trie.FlatDBTrieLoader[libcommon.Hash]
 	if blockNr < latestBlock {
 		if latestBlock-blockNr > uint64(api.MaxGetProofRewindBlockCount) {
 			return nil, fmt.Errorf("requested block is too old, block must be within %d blocks of the head block number (currently %d)", uint64(api.MaxGetProofRewindBlockCount), latestBlock)
@@ -373,7 +373,7 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 		}
 		tx = batch
 	} else {
-		loader = trie.NewFlatDBTrieLoader("eth_getProof", rl, nil, nil, false)
+		loader = trie.NewFlatDBTrieLoader("eth_getProof", rl, nil, nil, false, trie.NewRootHashAggregator(nil, nil, false))
 	}
 
 	reader, err := rpchelper.CreateStateReader(ctx, tx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(tx), "")
@@ -392,8 +392,8 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 		return nil, err
 	}
 
-	loader.SetProofRetainer(pr)
-	root, err := loader.CalcTrieRoot(tx, nil)
+	loader.Receiver().(*trie.RootHashAggregator).SetProofRetainer(pr)
+	root, err := loader.Result(tx, nil)
 	if err != nil {
 		return nil, err
 	}
