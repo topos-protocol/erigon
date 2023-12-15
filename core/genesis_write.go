@@ -190,7 +190,7 @@ func WriteGenesisState(g *types.Genesis, tx kv.RwTx, tmpDir string) (*types.Bloc
 		panic(err)
 	}
 
-	tds := state.NewTrieDbState(libcommon.Hash{}, tx, 0)
+	tds := state.NewTrieDbState(libcommon.Hash{}, tx, 0, nil)
 	tds.StartNewBuffer()
 
 	var stateWriter state.StateWriter

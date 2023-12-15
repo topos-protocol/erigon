@@ -35,6 +35,7 @@ type StreamReceiver[T any] interface {
 		cutoff int,
 	) error
 
+	Legacy() bool
 	Result() T
 	EmptyResult() T
 }
@@ -104,7 +105,7 @@ func NewFlatDbSubTrieLoader() *FlatDbSubTrieLoader {
 }
 
 // Reset prepares the loader for reuse
-func (fstl *FlatDbSubTrieLoader) Reset(db kv.RwTx, rl RetainDecider, receiverDecider RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) error {
+func (fstl *FlatDbSubTrieLoader) Reset(db kv.Tx, rl RetainDecider, receiverDecider RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) error {
 	fstl.defaultReceiver.Reset(receiverDecider, hc, trace)
 	fstl.hc = hc
 	fstl.receiver = fstl.defaultReceiver
@@ -410,6 +411,10 @@ func (dr *DefaultReceiver) Reset(rl RetainDecider, hc HashCollector, trace bool)
 	dr.hb.trace = trace
 }
 
+func (dr *DefaultReceiver) Legacy() bool {
+	return true
+}
+
 func (dr *DefaultReceiver) Receive(itemType StreamItem,
 	accountKey []byte,
 	storageKey []byte,
@@ -419,8 +424,11 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 	hasTree bool,
 	cutoff int,
 ) error {
+	fmt.Printf("Receive itemType %d, accountKey %x, storageKey %x, storageValue %x, hash %x, hasTree %v, cutoff %d\n", itemType, accountKey, storageKey, storageValue, hash, hasTree, cutoff)
+
 	switch itemType {
 	case StorageStreamItem:
+		fmt.Println("StorageStreamItem")
 		dr.advanceKeysStorage(storageKey, true /* terminator */)
 		if dr.currStorage.Len() > 0 {
 			if err := dr.genStructStorage(); err != nil {
@@ -429,7 +437,20 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 		}
 		dr.saveValueStorage(false, storageValue, hash)
 	case SHashStreamItem:
-		dr.advanceKeysStorage(storageKey, false /* terminator */)
+		fmt.Println("SHashStreamItem")
+		if len(accountKey) == 0 {
+			dr.advanceKeysStorage(storageKey, false /* terminator */)
+		} else {
+			if len(storageKey) == 0 {
+				dr.advanceKeysStorage(accountKey, false /* terminator */)
+			} else {
+				key := make([]byte, len(accountKey)+len(storageKey))
+				copy(key, accountKey)
+				copy(key[len(accountKey):], storageKey)
+
+				dr.advanceKeysStorage(key, false /* terminator */)
+			}
+		}
 		if dr.currStorage.Len() > 0 {
 			if err := dr.genStructStorage(); err != nil {
 				return err
@@ -437,8 +458,10 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 		}
 		dr.saveValueStorage(true, storageValue, hash)
 	case AccountStreamItem:
+		fmt.Println("AccountStreamItem")
 		dr.advanceKeysAccount(accountKey, true /* terminator */)
 		if dr.curr.Len() > 0 && !dr.wasIH {
+			fmt.Printf("In AccountStreamItem, dr.curr.Len() > 0 && !dr.wasIH\n")
 			dr.cutoffKeysStorage(2 * (length.Hash + common.IncarnationLength))
 			if dr.currStorage.Len() > 0 {
 				if err := dr.genStructStorage(); err != nil {
@@ -468,6 +491,7 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 			return err
 		}
 	case AHashStreamItem:
+		fmt.Println("AHashStreamItem")
 		dr.advanceKeysAccount(accountKey, false /* terminator */)
 		if dr.curr.Len() > 0 && !dr.wasIH {
 			dr.cutoffKeysStorage(2 * (length.Hash + common.IncarnationLength))
@@ -499,6 +523,7 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 			return err
 		}
 	case CutoffStreamItem:
+		fmt.Println("CutoffStreamItem")
 		if dr.trace {
 			fmt.Printf("storage cuttoff %d\n", cutoff)
 		}
@@ -661,7 +686,7 @@ func (fstl *FlatDbSubTrieLoader) logProgress() {
 	log.Info("Calculating Merkle root", "current key", k)
 }
 
-func (fstl *FlatDbSubTrieLoader) AttachRequestedCode(db kv.Getter, requests []*LoadRequestForCode) error {
+func AttachRequestedCode(db kv.Getter, requests []*LoadRequestForCode) error {
 	for _, req := range requests {
 		codeHash := req.codeHash
 		code, err := db.GetOne(kv.Code, codeHash[:])
@@ -696,6 +721,8 @@ func (dr *DefaultReceiver) advanceKeysStorage(k []byte, terminator bool) {
 	dr.succStorage.Reset()
 	// Transform k to nibbles, but skip the incarnation part in the middle
 	keyToNibbles(k, &dr.succStorage)
+
+	fmt.Printf("advanceKeysStorage k %x, dr.succStorage %x\n", k, dr.succStorage.Bytes())
 
 	if terminator {
 		dr.succStorage.WriteByte(16)
@@ -916,4 +943,412 @@ func keyIsBeforeOrEqualDeprecated(k1, k2 []byte) (bool, []byte) {
 	default:
 		return false, k2
 	}
+}
+
+type SubTrieAggregator struct {
+	trace          bool
+	wasIH          bool
+	wasIHStorage   bool
+	subTries       SubTries
+	root           libcommon.Hash
+	hc             HashCollector2
+	shc            StorageHashCollector2
+	currStorage    bytes.Buffer // Current key for the structure generation algorithm, as well as the input tape for the hash builder
+	succStorage    bytes.Buffer
+	valueStorage   []byte // Current value to be used as the value tape for the hash builder
+	hadTreeStorage bool
+	hashAccount    libcommon.Hash // Current value to be used as the value tape for the hash builder
+	hashStorage    libcommon.Hash // Current value to be used as the value tape for the hash builder
+	curr           bytes.Buffer   // Current key for the structure generation algorithm, as well as the input tape for the hash builder
+	succ           bytes.Buffer
+	currAccK       []byte
+	value          []byte // Current value to be used as the value tape for the hash builder
+	hadTreeAcc     bool
+	groups         []uint16 // `groups` parameter is the map of the stack. each element of the `groups` slice is a bitmask, one bit per element currently on the stack. See `GenStructStep` docs
+	hasTree        []uint16
+	hasHash        []uint16
+	groupsStorage  []uint16 // `groups` parameter is the map of the stack. each element of the `groups` slice is a bitmask, one bit per element currently on the stack. See `GenStructStep` docs
+	hasTreeStorage []uint16
+	hasHashStorage []uint16
+	hb             *HashBuilder
+	hashData       GenStructStepHashData
+	a              accounts.Account
+	leafData       GenStructStepLeafData
+	accData        GenStructStepAccountData
+
+	// Used to construct an Account proof while calculating the tree root.
+	proofRetainer *ProofRetainer
+	rl            *RetainList
+	cutoff        bool
+}
+
+func NewSubTrieAggregator(hc HashCollector2, shc StorageHashCollector2, trace bool) *SubTrieAggregator {
+	return &SubTrieAggregator{
+		hb:    NewHashBuilder(false),
+		hc:    hc,
+		shc:   shc,
+		trace: trace,
+	}
+}
+
+func (r *SubTrieAggregator) SetRetainList(rl *RetainList) {
+	r.rl = rl
+}
+
+func (r *SubTrieAggregator) RetainNothing(_ []byte) bool {
+	return false
+}
+
+func (r *SubTrieAggregator) Retain(data []byte) bool {
+	return r.rl.Retain(data)
+}
+
+func (r *SubTrieAggregator) EmptyResult() SubTries {
+	return SubTries{}
+}
+
+func (r *SubTrieAggregator) Legacy() bool {
+	return false
+}
+
+func (r *SubTrieAggregator) Receive(itemType StreamItem,
+	accountKey []byte,
+	storageKey []byte,
+	accountValue *accounts.Account,
+	storageValue []byte,
+	hash []byte,
+	hasTree bool,
+	cutoff int,
+) error {
+	//r.traceIf("9c3dc2561d472d125d8f87dde8f2e3758386463ade768ae1a1546d34101968bb", "00")
+	//if storageKey == nil {
+	//	//if bytes.HasPrefix(accountKey, common.FromHex("08050d07")) {
+	//	fmt.Printf("1: %d, %x, %x\n", itemType, accountKey, hash)
+	//	//}
+	//} else {
+	//	//if bytes.HasPrefix(accountKey, common.FromHex("876f5a0f54b30254d2bad26bb5a8da19cbe748fd033004095d9c96c8e667376b")) && bytes.HasPrefix(storageKey, common.FromHex("")) {
+	//	//fmt.Printf("%x\n", storageKey)
+	//	fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
+	//	//}
+	//}
+	//
+
+	switch itemType {
+	case StorageStreamItem:
+		if len(r.currAccK) == 0 {
+			r.currAccK = append(r.currAccK[:0], accountKey...)
+		}
+		r.advanceKeysStorage(storageKey, true /* terminator */)
+		if r.currStorage.Len() > 0 {
+			if err := r.genStructStorage(); err != nil {
+				return err
+			}
+		}
+		r.saveValueStorage(false, hasTree, storageValue, hash)
+	case SHashStreamItem:
+		if len(storageKey) == 0 { // this is ready-to-use storage root - no reason to call GenStructStep, also GenStructStep doesn't support empty prefixes
+			r.hb.hashStack = append(append(r.hb.hashStack, byte(80+length.Hash)), hash...)
+			r.hb.nodeStack = append(r.hb.nodeStack, nil)
+			r.accData.FieldSet |= AccountFieldStorageOnly
+			break
+		}
+		if len(r.currAccK) == 0 {
+			r.currAccK = append(r.currAccK[:0], accountKey...)
+		}
+		r.advanceKeysStorage(storageKey, false /* terminator */)
+		if r.currStorage.Len() > 0 {
+			if err := r.genStructStorage(); err != nil {
+				return err
+			}
+		}
+		r.saveValueStorage(true, hasTree, storageValue, hash)
+	case AccountStreamItem:
+		r.advanceKeysAccount(accountKey, true /* terminator */)
+		if r.curr.Len() > 0 && !r.wasIH {
+			r.cutoffKeysStorage(0)
+			if r.currStorage.Len() > 0 {
+				if err := r.genStructStorage(); err != nil {
+					return err
+				}
+			}
+			if r.currStorage.Len() > 0 {
+				r.groupsStorage = r.groupsStorage[:0]
+				r.hasTreeStorage = r.hasTreeStorage[:0]
+				r.hasHashStorage = r.hasHashStorage[:0]
+				r.currStorage.Reset()
+				r.succStorage.Reset()
+				r.wasIHStorage = false
+				// There are some storage items
+				r.accData.FieldSet |= AccountFieldStorageOnly
+			}
+		}
+		r.currAccK = r.currAccK[:0]
+		if r.curr.Len() > 0 {
+			if err := r.genStructAccount(); err != nil {
+				return err
+			}
+		}
+		if err := r.saveValueAccount(false, hasTree, accountValue, hash); err != nil {
+			return err
+		}
+	case AHashStreamItem:
+		r.advanceKeysAccount(accountKey, false /* terminator */)
+		if r.curr.Len() > 0 && !r.wasIH {
+			r.cutoffKeysStorage(0)
+			if r.currStorage.Len() > 0 {
+				if err := r.genStructStorage(); err != nil {
+					return err
+				}
+			}
+			if r.currStorage.Len() > 0 {
+				r.groupsStorage = r.groupsStorage[:0]
+				r.hasTreeStorage = r.hasTreeStorage[:0]
+				r.hasHashStorage = r.hasHashStorage[:0]
+				r.currStorage.Reset()
+				r.succStorage.Reset()
+				r.wasIHStorage = false
+				// There are some storage items
+				r.accData.FieldSet |= AccountFieldStorageOnly
+			}
+		}
+		r.currAccK = r.currAccK[:0]
+		if r.curr.Len() > 0 {
+			if err := r.genStructAccount(); err != nil {
+				return err
+			}
+		}
+		if err := r.saveValueAccount(true, hasTree, accountValue, hash); err != nil {
+			return err
+		}
+	case CutoffStreamItem:
+		if r.trace {
+			fmt.Printf("storage cuttoff %d\n", cutoff)
+		}
+		r.cutoffKeysAccount(cutoff)
+		if r.curr.Len() > 0 && !r.wasIH {
+			r.cutoffKeysStorage(0)
+			if r.currStorage.Len() > 0 {
+				if err := r.genStructStorage(); err != nil {
+					return err
+				}
+			}
+			if r.currStorage.Len() > 0 {
+				r.groupsStorage = r.groupsStorage[:0]
+				r.hasTreeStorage = r.hasTreeStorage[:0]
+				r.hasHashStorage = r.hasHashStorage[:0]
+				r.currStorage.Reset()
+				r.succStorage.Reset()
+				r.wasIHStorage = false
+				// There are some storage items
+				r.accData.FieldSet |= AccountFieldStorageOnly
+
+				r.subTries.roots = append(r.subTries.roots, r.hb.root())
+				r.subTries.Hashes = append(r.subTries.Hashes, r.hb.rootHash())
+			} else {
+				// r.subTries.roots = append(r.subTries.roots, nil)
+				// r.subTries.Hashes = append(r.subTries.Hashes, libcommon.Hash{})
+			}
+		}
+
+		// Used for optional GetProof calculation to trigger inclusion of the top-level node
+		r.cutoff = true
+
+		if r.curr.Len() > 0 {
+			if err := r.genStructAccount(); err != nil {
+				return err
+			}
+		}
+		if r.curr.Len() > 0 {
+			if len(r.groups) > cutoff {
+				r.groups = r.groups[:cutoff]
+				r.hasTree = r.hasTree[:cutoff]
+				r.hasHash = r.hasHash[:cutoff]
+			}
+		}
+		if r.hb.hasRoot() {
+			r.root = r.hb.rootHash()
+			r.subTries.roots = append(r.subTries.roots, r.hb.root())
+			r.subTries.Hashes = append(r.subTries.Hashes, r.hb.rootHash())
+		} else {
+			r.root = EmptyRoot
+			// r.subTries.roots = append(r.subTries.roots, nil)
+			// r.subTries.Hashes = append(r.subTries.Hashes, EmptyRoot)
+		}
+		r.groups = r.groups[:0]
+		r.hasTree = r.hasTree[:0]
+		r.hasHash = r.hasHash[:0]
+		r.hb.Reset()
+		r.wasIH = false
+		r.wasIHStorage = false
+		r.curr.Reset()
+		r.succ.Reset()
+		r.currStorage.Reset()
+		r.succStorage.Reset()
+	}
+	return nil
+}
+
+func (r *SubTrieAggregator) Result() SubTries {
+	return r.subTries
+}
+
+func (r *SubTrieAggregator) advanceKeysStorage(k []byte, terminator bool) {
+	r.currStorage.Reset()
+	r.currStorage.Write(r.succStorage.Bytes())
+	r.succStorage.Reset()
+	// Transform k to nibbles, but skip the incarnation part in the middle
+	r.succStorage.Write(k)
+
+	if terminator {
+		r.succStorage.WriteByte(16)
+	}
+}
+
+func (r *SubTrieAggregator) cutoffKeysStorage(cutoff int) {
+	r.currStorage.Reset()
+	r.currStorage.Write(r.succStorage.Bytes())
+	r.succStorage.Reset()
+	//if r.currStorage.Len() > 0 {
+	//r.succStorage.Write(r.currStorage.Bytes()[:cutoff-1])
+	//r.succStorage.WriteByte(r.currStorage.Bytes()[cutoff-1] + 1) // Modify last nibble in the incarnation part of the `currStorage`
+	//}
+}
+
+func (r *SubTrieAggregator) genStructStorage() error {
+	var err error
+	var data GenStructStepData
+	if r.wasIHStorage {
+		r.hashData.Hash = r.hashStorage
+		r.hashData.HasTree = r.hadTreeStorage
+		data = &r.hashData
+	} else {
+		r.leafData.Value = rlphacks.RlpSerializableBytes(r.valueStorage)
+		data = &r.leafData
+	}
+	var wantProof func(_ []byte) *proofElement
+	if r.proofRetainer != nil {
+		var fullKey [2 * (length.Hash + length.Incarnation + length.Hash)]byte
+		for i, b := range r.currAccK {
+			fullKey[i*2] = b / 16
+			fullKey[i*2+1] = b % 16
+		}
+		for i, b := range binary.BigEndian.AppendUint64(nil, r.a.Incarnation) {
+			fullKey[2*length.Hash+i*2] = b / 16
+			fullKey[2*length.Hash+i*2+1] = b % 16
+		}
+		baseKeyLen := 2 * (length.Hash + length.Incarnation)
+		wantProof = func(prefix []byte) *proofElement {
+			copy(fullKey[baseKeyLen:], prefix)
+			return r.proofRetainer.ProofElement(fullKey[:baseKeyLen+len(prefix)])
+		}
+	}
+	r.groupsStorage, r.hasTreeStorage, r.hasHashStorage, err = GenStructStepEx(r.rl.Retain, r.currStorage.Bytes(), r.succStorage.Bytes(), r.hb, func(keyHex []byte, hasState, hasTree, hasHash uint16, hashes, rootHash []byte) error {
+		if r.shc == nil {
+			return nil
+		}
+		return r.shc(r.currAccK, keyHex, hasState, hasTree, hasHash, hashes, rootHash)
+	}, data, r.groupsStorage, r.hasTreeStorage, r.hasHashStorage,
+		r.trace,
+		wantProof,
+		r.cutoff,
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *SubTrieAggregator) saveValueStorage(isIH, hasTree bool, v, h []byte) {
+	// Remember the current value
+	r.wasIHStorage = isIH
+	r.valueStorage = nil
+	if isIH {
+		r.hashStorage.SetBytes(h)
+		r.hadTreeStorage = hasTree
+	} else {
+		r.valueStorage = v
+	}
+}
+
+func (r *SubTrieAggregator) advanceKeysAccount(k []byte, terminator bool) {
+	r.curr.Reset()
+	r.curr.Write(r.succ.Bytes())
+	r.succ.Reset()
+	r.succ.Write(k)
+	if terminator {
+		r.succ.WriteByte(16)
+	}
+}
+
+func (r *SubTrieAggregator) cutoffKeysAccount(cutoff int) {
+	r.curr.Reset()
+	r.curr.Write(r.succ.Bytes())
+	r.succ.Reset()
+	if r.curr.Len() > 0 && cutoff > 0 {
+		r.succ.Write(r.curr.Bytes()[:cutoff-1])
+		r.succ.WriteByte(r.curr.Bytes()[cutoff-1] + 1) // Modify last nibble before the cutoff point
+	}
+}
+
+func (r *SubTrieAggregator) genStructAccount() error {
+	var data GenStructStepData
+	if r.wasIH {
+		r.hashData.Hash = r.hashAccount
+		r.hashData.HasTree = r.hadTreeAcc
+		data = &r.hashData
+	} else {
+		r.accData.Balance.Set(&r.a.Balance)
+		if !r.a.Balance.IsZero() {
+			r.accData.FieldSet |= AccountFieldBalanceOnly
+		}
+		r.accData.Nonce = r.a.Nonce
+		if r.a.Nonce != 0 {
+			r.accData.FieldSet |= AccountFieldNonceOnly
+		}
+		r.accData.Incarnation = r.a.Incarnation
+		data = &r.accData
+	}
+	r.wasIHStorage = false
+	r.currStorage.Reset()
+	r.succStorage.Reset()
+	var err error
+
+	var wantProof func(_ []byte) *proofElement
+	if r.proofRetainer != nil {
+		wantProof = r.proofRetainer.ProofElement
+	}
+	if r.groups, r.hasTree, r.hasHash, err = GenStructStepEx(r.rl.Retain, r.curr.Bytes(), r.succ.Bytes(), r.hb, func(keyHex []byte, hasState, hasTree, hasHash uint16, hashes, rootHash []byte) error {
+		if r.hc == nil {
+			return nil
+		}
+		return r.hc(keyHex, hasState, hasTree, hasHash, hashes, rootHash)
+	}, data, r.groups, r.hasTree, r.hasHash,
+		//false,
+		r.trace,
+		wantProof,
+		r.cutoff,
+	); err != nil {
+		return err
+	}
+	r.accData.FieldSet = 0
+	return nil
+}
+
+func (r *SubTrieAggregator) saveValueAccount(isIH, hasTree bool, v *accounts.Account, h []byte) error {
+	r.wasIH = isIH
+	if isIH {
+		r.hashAccount.SetBytes(h)
+		r.hadTreeAcc = hasTree
+		return nil
+	}
+	r.a.Copy(v)
+	// Place code on the stack first, the storage will follow
+	if !r.a.IsEmptyCodeHash() {
+		// the first item ends up deepest on the stack, the second item - on the top
+		r.accData.FieldSet |= AccountFieldCodeOnly
+		if err := r.hb.hash(r.a.CodeHash[:]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

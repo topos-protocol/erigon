@@ -191,13 +191,7 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		if block.NumberU64() > 0 {
 			witness_bytes, err = stateless.ReadChunks(tx, kv.Witnesses, k)
 		} else {
-			emptyTrie := trie.Trie{}
-			w, err := emptyTrie.ExtractWitness(false, nil)
-			if err != nil {
-				log.Warn("error while extracting empty witness", "err", err)
-				stream.WriteNil()
-				return err
-			}
+			w := trie.NewWitness(make([]trie.WitnessOperator, 0))
 
 			var buf bytes.Buffer
 			_, err = w.WriteInto(&buf)

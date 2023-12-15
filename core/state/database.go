@@ -222,7 +222,9 @@ func (b *Buffer) merge(other *Buffer) {
 type TrieDbState struct {
 	t                 *trie.Trie
 	tMu               *sync.Mutex
-	db                kv.RwTx
+	db                kv.Tx
+	stateReader       StateReader
+	rl                *trie.RetainList
 	blockNr           uint64
 	buffers           []*Buffer
 	aggregateBuffer   *Buffer // Merge of all buffers
@@ -239,7 +241,7 @@ type TrieDbState struct {
 	incarnationMap    map[common.Address]uint64 // Temporary map of incarnation for the cases when contracts are deleted and recreated within 1 block
 }
 
-func NewTrieDbState(root common.Hash, db kv.RwTx, blockNr uint64) *TrieDbState {
+func NewTrieDbState(root common.Hash, db kv.Tx, blockNr uint64, stateReader StateReader) *TrieDbState {
 	t := trie.New(root)
 	tp := trie.NewEviction()
 
@@ -247,6 +249,7 @@ func NewTrieDbState(root common.Hash, db kv.RwTx, blockNr uint64) *TrieDbState {
 		t:                 t,
 		tMu:               new(sync.Mutex),
 		db:                db,
+		stateReader:       stateReader,
 		blockNr:           blockNr,
 		retainListBuilder: trie.NewRetainListBuilder(),
 		tp:                tp,
@@ -258,9 +261,13 @@ func NewTrieDbState(root common.Hash, db kv.RwTx, blockNr uint64) *TrieDbState {
 	tp.SetBlockNumber(blockNr)
 
 	t.AddObserver(tp)
-	t.AddObserver(NewIntermediateHashes(tds.db, tds.db))
+	// t.AddObserver(NewIntermediateHashes(tds.db, tds.db))
 
 	return tds
+}
+
+func (tds *TrieDbState) SetRetainList(rl *trie.RetainList) {
+	tds.rl = rl
 }
 
 func (tds *TrieDbState) EnablePreimages(ep bool) {
@@ -302,10 +309,6 @@ func (tds *TrieDbState) Copy() *TrieDbState {
 	cpy.t.AddObserver(tp)
 
 	return &cpy
-}
-
-func (tds *TrieDbState) Database() kv.RwTx {
-	return tds.db
 }
 
 func (tds *TrieDbState) Trie() *trie.Trie {
@@ -541,7 +544,7 @@ func (tds *TrieDbState) resolveCodeTouches(
 	}
 
 	if !firstRequest {
-		if _, err := loadFunc(tds.loader, nil, nil, nil); err != nil {
+		if _, err := loadFunc(tds.loader, tds.rl, nil, nil); err != nil {
 			return err
 		}
 	}
@@ -552,32 +555,48 @@ var bytes8 [8]byte
 
 func (tds *TrieDbState) resolveAccountAndStorageTouches(accountTouches common.Hashes, storageTouches common.StorageKeys, loadFunc trie.LoadFunc) error {
 	// Build the retain list
-	rl := trie.NewRetainList(0)
+	var rl *trie.RetainList
+	if tds.rl == nil {
+		rl = trie.NewRetainList(0)
+	} else {
+		rl = tds.rl
+	}
+
 	for _, addrHash := range accountTouches {
-		var incarnation uint64
-		if inc, ok := tds.aggregateBuffer.accountReadsIncarnation[addrHash]; ok {
-			incarnation = inc
-		}
-		var nibbles = make([]byte, 2*(length.Hash+length.Incarnation))
-		for i, b := range addrHash[:] {
-			nibbles[i*2] = b / 16
-			nibbles[i*2+1] = b % 16
-		}
-		binary.BigEndian.PutUint64(bytes8[:], incarnation)
-		for i, b := range bytes8[:] {
-			nibbles[2*length.Hash+i*2] = b / 16
-			nibbles[2*length.Hash+i*2+1] = b % 16
-		}
-		rl.AddHex(nibbles)
+		rl.AddKey(addrHash[:])
 	}
-	for _, storageKey := range storageTouches {
-		var nibbles = make([]byte, 2*len(storageKey))
-		for i, b := range storageKey[:] {
-			nibbles[i*2] = b / 16
-			nibbles[i*2+1] = b % 16
-		}
-		rl.AddHex(nibbles)
+
+	for _, sk := range storageTouches {
+		rl.AddKey(sk[:])
 	}
+
+	// hookRl := trie.NewRetainList(0)
+
+	// for _, addrHash := range accountTouches {
+	// 	var incarnation uint64
+	// 	if inc, ok := tds.aggregateBuffer.accountReadsIncarnation[addrHash]; ok {
+	// 		incarnation = inc
+	// 	}
+	// 	var nibbles = make([]byte, 2*(length.Hash+length.Incarnation))
+	// 	for i, b := range addrHash[:] {
+	// 		nibbles[i*2] = b / 16
+	// 		nibbles[i*2+1] = b % 16
+	// 	}
+	// 	binary.BigEndian.PutUint64(bytes8[:], incarnation)
+	// 	for i, b := range bytes8[:] {
+	// 		nibbles[2*length.Hash+i*2] = b / 16
+	// 		nibbles[2*length.Hash+i*2+1] = b % 16
+	// 	}
+	// 	hookRl.AddHex(nibbles)
+	// }
+	// for _, storageKey := range storageTouches {
+	// 	var nibbles = make([]byte, 2*len(storageKey))
+	// 	for i, b := range storageKey[:] {
+	// 		nibbles[i*2] = b / 16
+	// 		nibbles[i*2+1] = b % 16
+	// 	}
+	// 	hookRl.AddHex(nibbles)
+	// }
 
 	// fmt.Printf("tds.t %x", tds.t.Root())
 
@@ -615,7 +634,7 @@ func (tds *TrieDbState) ExtractTouches() (accountTouches [][]byte, storageTouche
 	return tds.retainListBuilder.ExtractTouches()
 }
 
-func (tds *TrieDbState) resolveStateTrieWithFunc(loadFunc trie.LoadFunc) error {
+func (tds *TrieDbState) ResolveStateTrieWithFunc(loadFunc trie.LoadFunc) error {
 	// Aggregating the current buffer, if any
 	if tds.currentBuffer != nil {
 		if tds.aggregateBuffer == nil {
@@ -689,7 +708,7 @@ func (tds *TrieDbState) ResolveStateTrie(extractWitnesses bool, trace bool) ([]*
 		witnesses, err = trie.ExtractWitnesses(subTries, trace, rl)
 		return subTries, err
 	}
-	if err := tds.resolveStateTrieWithFunc(loadFunc); err != nil {
+	if err := tds.ResolveStateTrieWithFunc(loadFunc); err != nil {
 		return nil, err
 	}
 
@@ -713,7 +732,7 @@ func (tds *TrieDbState) ResolveStateTrieStateless(database trie.WitnessStorage) 
 		return subTries, nil
 	}
 
-	return tds.resolveStateTrieWithFunc(loadFunc)
+	return tds.ResolveStateTrieWithFunc(loadFunc)
 }
 
 // CalcTrieRoots calculates trie roots without modifying the state trie
@@ -991,15 +1010,26 @@ func (tds *TrieDbState) GetAccount(addrHash common.Hash) (*accounts.Account, boo
 }
 
 func (tds *TrieDbState) ReadAccountData(address common.Address) (*accounts.Account, error) {
+	var account *accounts.Account
+
 	addrHash, err := common.HashData(address[:])
 	if err != nil {
 		return nil, err
 	}
-	var account *accounts.Account
-	account, err = tds.readAccountDataByHash(addrHash)
-	if err != nil {
-		return nil, err
+
+	if tds.stateReader != nil {
+		account, err = tds.stateReader.ReadAccountData(address)
+
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		account, err = tds.readAccountDataByHash(addrHash)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	if tds.resolveReads {
 		tds.currentBuffer.accountReads[addrHash] = struct{}{}
 		if account != nil {
@@ -1040,32 +1070,28 @@ func (tds *TrieDbState) ReadAccountStorage(address common.Address, incarnation u
 		tds.currentBuffer.storageReads[storageKey] = struct{}{}
 	}
 
-	tds.tMu.Lock()
-	defer tds.tMu.Unlock()
-	enc, ok := tds.t.Get(dbutils.GenerateCompositeTrieKey(addrHash, seckey))
-	if !ok {
-		// Not present in the trie, try database
-		enc, err = tds.db.GetOne(kv.HashedAccounts, dbutils.GenerateCompositeStorageKey(addrHash, incarnation, seckey))
+	if tds.stateReader != nil {
+		enc, err := tds.stateReader.ReadAccountStorage(address, incarnation, key)
+
 		if err != nil {
-			enc = nil
+			return nil, err
 		}
-	}
-	return enc, nil
-}
 
-func (tds *TrieDbState) ReadCodeByHash(codeHash common.Hash) (code []byte, err error) {
-	if bytes.Equal(codeHash[:], emptyCodeHash) {
-		return nil, nil
-	}
+		return enc, nil
+	} else {
+		tds.tMu.Lock()
+		defer tds.tMu.Unlock()
+		enc, ok := tds.t.Get(dbutils.GenerateCompositeTrieKey(addrHash, seckey))
+		if !ok {
+			// Not present in the trie, try database
+			enc, err = tds.db.GetOne(kv.HashedAccounts, dbutils.GenerateCompositeStorageKey(addrHash, incarnation, seckey))
+			if err != nil {
+				enc = nil
+			}
+		}
 
-	code, err = tds.db.GetOne(kv.Code, codeHash[:])
-	if tds.resolveReads {
-		// we have to be careful, because the code might change
-		// during the block executuion, so we are always
-		// storing the latest code hash
-		tds.retainListBuilder.ReadCode(codeHash)
+		return enc, nil
 	}
-	return code, err
 }
 
 func (tds *TrieDbState) readAccountCodeFromTrie(addrHash []byte) ([]byte, bool) {
@@ -1093,7 +1119,11 @@ func (tds *TrieDbState) ReadAccountCode(address common.Address, incarnation uint
 	if cached, ok := tds.readAccountCodeFromTrie(addrHash[:]); ok {
 		code, err = cached, nil
 	} else {
-		code, err = tds.db.GetOne(kv.Code, codeHash[:])
+		if tds.stateReader != nil {
+			code, err = tds.stateReader.ReadAccountCode(address, incarnation, codeHash)
+		} else {
+			code, err = tds.db.GetOne(kv.Code, codeHash[:])
+		}
 	}
 	if tds.resolveReads {
 		addrHash, err1 := common.HashData(address[:])
@@ -1119,12 +1149,16 @@ func (tds *TrieDbState) ReadAccountCodeSize(address common.Address, incarnation 
 	if cached, ok := tds.readAccountCodeSizeFromTrie(addrHash[:]); ok {
 		codeSize, err = cached, nil
 	} else {
-		var code []byte
-		code, err = tds.db.GetOne(kv.Code, codeHash[:])
-		if err != nil {
-			return 0, err
+		if tds.stateReader != nil {
+			codeSize, err = tds.stateReader.ReadAccountCodeSize(address, incarnation, codeHash)
+		} else {
+			var code []byte
+			code, err = tds.db.GetOne(kv.Code, codeHash[:])
+			if err != nil {
+				return 0, err
+			}
+			codeSize = len(code)
 		}
-		codeSize = len(code)
 	}
 	if tds.resolveReads {
 		addrHash, err1 := common.HashData(address[:])
@@ -1146,16 +1180,26 @@ func (tds *TrieDbState) ReadAccountIncarnation(address common.Address) (uint64, 
 	if inc, ok := tds.incarnationMap[address]; ok {
 		return inc, nil
 	}
-	if b, err := tds.db.GetOne(kv.IncarnationMap, address[:]); err == nil {
-		if len(b) == 0 {
-			return 0, nil
-		}
 
-		return binary.BigEndian.Uint64(b), nil
-	} else if errors.Is(err, ethdb.ErrKeyNotFound) {
-		return 0, nil
+	if tds.stateReader != nil {
+		inc, err := tds.stateReader.ReadAccountIncarnation(address)
+		if err != nil {
+			return 0, err
+		} else {
+			return inc, nil
+		}
 	} else {
-		return 0, err
+		if b, err := tds.db.GetOne(kv.IncarnationMap, address[:]); err == nil {
+			if len(b) == 0 {
+				return 0, nil
+			}
+
+			return binary.BigEndian.Uint64(b), nil
+		} else if errors.Is(err, ethdb.ErrKeyNotFound) {
+			return 0, nil
+		} else {
+			return 0, err
+		}
 	}
 }
 
@@ -1237,12 +1281,13 @@ func (tds *TrieDbState) TrieStateWriter() *TrieStateWriter {
 
 // DbStateWriter creates a writer that is designed to write changes into the database batch
 func (tds *TrieDbState) DbStateWriter() *DbStateWriter {
-	return &DbStateWriter{blockNr: tds.blockNr, db: tds.db, csw: NewChangeSetWriter(), legacy: true}
-}
+	db, ok := tds.db.(putDel)
 
-// DbStateWriter creates a writer that is designed to write changes into the database batch
-func (tds *TrieDbState) PlainStateWriter() *PlainStateWriter {
-	return NewPlainStateWriter(tds.db, nil, tds.blockNr)
+	if !ok {
+		panic("DbStateWriter can only be used with a putDel database")
+	}
+
+	return &DbStateWriter{blockNr: tds.blockNr, db: db, csw: NewChangeSetWriter(), legacy: true}
 }
 
 func (tsw *TrieStateWriter) UpdateAccountData(address common.Address, original, account *accounts.Account) error {

@@ -1,12 +1,14 @@
 package state
 
 import (
+	"fmt"
+
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 )
 
 type PreimageWriter struct {
-	db            kv.GetPut
+	db            kv.Getter
 	savePreimages bool
 }
 
@@ -39,5 +41,12 @@ func (pw *PreimageWriter) savePreimage(save bool, hash []byte, preimage []byte) 
 	if p, _ := pw.db.GetOne(kv.PreimagePrefix, hash); p != nil {
 		return nil
 	}
-	return pw.db.Put(kv.PreimagePrefix, hash, preimage)
+
+	putter, ok := pw.db.(kv.Putter)
+
+	if !ok {
+		return fmt.Errorf("db does not support putter interface")
+	}
+
+	return putter.Put(kv.PreimagePrefix, hash, preimage)
 }

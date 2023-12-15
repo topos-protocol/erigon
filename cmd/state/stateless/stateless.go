@@ -268,7 +268,7 @@ func Stateless(
 
 	// defer batch.Flush(rwTx)
 
-	tds := state.NewTrieDbState(preRoot, rwTx, blockNum-1)
+	tds := state.NewTrieDbState(preRoot, rwTx, blockNum-1, nil)
 
 	tds.SetResolveReads(false)
 	tds.SetNoHistory(!writeHistory)

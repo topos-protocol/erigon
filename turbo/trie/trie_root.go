@@ -239,8 +239,16 @@ func (l *FlatDBTrieLoader[T]) Result(tx kv.Tx, quit <-chan struct{}) (T, error) 
 			if err = l.accountValue.DecodeForStorage(v); err != nil {
 				return l.receiver.EmptyResult(), fmt.Errorf("fail DecodeForStorage: %w", err)
 			}
-			if err = l.receiver.Receive(AccountStreamItem, kHex, nil, &l.accountValue, nil, nil, false, 0); err != nil {
-				return l.receiver.EmptyResult(), err
+
+			fmt.Printf("k %x, kHex %x\n", k, kHex)
+			if l.receiver.Legacy() {
+				if err = l.receiver.Receive(AccountStreamItem, k, nil, &l.accountValue, nil, nil, false, 0); err != nil {
+					return l.receiver.EmptyResult(), err
+				}
+			} else {
+				if err = l.receiver.Receive(AccountStreamItem, kHex, nil, &l.accountValue, nil, nil, false, 0); err != nil {
+					return l.receiver.EmptyResult(), err
+				}
 			}
 			if l.accountValue.Incarnation == 0 {
 				continue
@@ -270,8 +278,19 @@ func (l *FlatDBTrieLoader[T]) Result(tx kv.Tx, quit <-chan struct{}) (T, error) 
 					if keyIsBefore(ihKS, l.kHexS) { // read until next AccTrie
 						break
 					}
-					if err = l.receiver.Receive(StorageStreamItem, accWithInc, l.kHexS, nil, vS[32:], nil, false, 0); err != nil {
-						return l.receiver.EmptyResult(), err
+
+					fmt.Printf("accWithInc %x\n", accWithInc)
+					if l.receiver.Legacy() {
+						var sKey []byte
+						sKey = append(sKey, accWithInc...)
+						sKey = append(sKey, vS[:32]...)
+						if err = l.receiver.Receive(StorageStreamItem, nil, sKey, nil, vS[32:], nil, false, 0); err != nil {
+							return l.receiver.EmptyResult(), err
+						}
+					} else {
+						if err = l.receiver.Receive(StorageStreamItem, accWithInc, l.kHexS, nil, vS[32:], nil, false, 0); err != nil {
+							return l.receiver.EmptyResult(), err
+						}
 					}
 				}
 
@@ -280,6 +299,7 @@ func (l *FlatDBTrieLoader[T]) Result(tx kv.Tx, quit <-chan struct{}) (T, error) 
 					break
 				}
 
+				fmt.Printf("accWithInc %x, ihKS: %x, len(ihKS): %d\n", accWithInc, ihKS, len(ihKS))
 				if err = l.receiver.Receive(SHashStreamItem, accWithInc, ihKS, nil, nil, ihVS, hasTreeS, 0); err != nil {
 					return l.receiver.EmptyResult(), err
 				}
@@ -300,6 +320,7 @@ func (l *FlatDBTrieLoader[T]) Result(tx kv.Tx, quit <-chan struct{}) (T, error) 
 			break
 		}
 
+		fmt.Printf("ihK %x\n", ihK)
 		if err = l.receiver.Receive(AHashStreamItem, ihK, nil, nil, nil, ihV, hasTree, 0); err != nil {
 			return l.receiver.EmptyResult(), err
 		}
@@ -335,6 +356,10 @@ func (r *RootHashAggregator) RetainNothing(_ []byte) bool {
 
 func (r *RootHashAggregator) EmptyResult() libcommon.Hash {
 	return libcommon.Hash{}
+}
+
+func (r *RootHashAggregator) Legacy() bool {
+	return false
 }
 
 func (r *RootHashAggregator) Receive(itemType StreamItem,

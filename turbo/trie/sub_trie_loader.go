@@ -48,6 +48,10 @@ func (stl *SubTrieLoader) AddCodeRequest(req *LoadRequestForCode) {
 	stl.codeRequests = append(stl.codeRequests, req)
 }
 
+func (stl *SubTrieLoader) CodeRequests() []*LoadRequestForCode {
+	return stl.codeRequests
+}
+
 // Various values of the account field set
 const (
 	AccountFieldNonceOnly     uint32 = 0x01
@@ -59,11 +63,11 @@ const (
 )
 
 // LoadFromDb loads subtries from a state database.
-func (stl *SubTrieLoader) LoadSubTries(db kv.RwTx, blockNr uint64, rl RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) (SubTries, error) {
+func (stl *SubTrieLoader) LoadSubTries(db kv.Tx, blockNr uint64, rl RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) (SubTries, error) {
 	return stl.LoadFromFlatDB(db, rl, hc, dbPrefixes, fixedbits, trace)
 }
 
-func (stl *SubTrieLoader) LoadFromFlatDB(db kv.RwTx, rl RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) (SubTries, error) {
+func (stl *SubTrieLoader) LoadFromFlatDB(db kv.Tx, rl RetainDecider, hc HashCollector, dbPrefixes [][]byte, fixedbits []int, trace bool) (SubTries, error) {
 	loader := NewFlatDbSubTrieLoader()
 	if err1 := loader.Reset(db, rl, rl, hc, dbPrefixes, fixedbits, trace); err1 != nil {
 		return SubTries{}, err1
@@ -72,7 +76,7 @@ func (stl *SubTrieLoader) LoadFromFlatDB(db kv.RwTx, rl RetainDecider, hc HashCo
 	if err != nil {
 		return subTries, err
 	}
-	if err = loader.AttachRequestedCode(db, stl.codeRequests); err != nil {
+	if err = AttachRequestedCode(db, stl.codeRequests); err != nil {
 		return subTries, err
 	}
 	return subTries, nil

@@ -660,17 +660,17 @@ func UnwindIntermediateHashesStage(u *UnwindState, s *StageState, tx kv.RwTx, cf
 	return nil
 }
 
-func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, accTrieCollectorFunc trie.HashCollector2, stTrieCollectorFunc trie.StorageHashCollector2, quit <-chan struct{}, logger log.Logger) (*trie.FlatDBTrieLoader[libcommon.Hash], error) {
+func UnwindIntermediateHashes(logPrefix string, rl *trie.RetainList, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, quit <-chan struct{}, logger log.Logger) error {
 	p := NewHashPromoter(db, cfg.tmpDir, quit, logPrefix, logger)
 	if cfg.historyV3 {
 		collect := func(k, v []byte) {
 			rl.AddKeyWithMarker(k, len(v) == 0)
 		}
 		if err := p.UnwindOnHistoryV3(logPrefix, s.BlockNumber, u.UnwindPoint, false, collect); err != nil {
-			return nil, err
+			return err
 		}
 		if err := p.UnwindOnHistoryV3(logPrefix, s.BlockNumber, u.UnwindPoint, true, collect); err != nil {
-			return nil, err
+			return err
 		}
 	} else {
 		collect := func(k, v []byte, _ etl.CurrentTableReader, _ etl.LoadNextFunc) error {
@@ -678,11 +678,21 @@ func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList
 			return nil
 		}
 		if err := p.Unwind(logPrefix, s, u, false /* storage */, collect); err != nil {
-			return nil, err
+			return err
 		}
 		if err := p.Unwind(logPrefix, s, u, true /* storage */, collect); err != nil {
-			return nil, err
+			return err
 		}
+	}
+
+	return nil
+}
+
+func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, accTrieCollectorFunc trie.HashCollector2, stTrieCollectorFunc trie.StorageHashCollector2, quit <-chan struct{}, logger log.Logger) (*trie.FlatDBTrieLoader[libcommon.Hash], error) {
+	err := UnwindIntermediateHashes(logPrefix, rl, u, s, db, cfg, quit, logger)
+
+	if err != nil {
+		return nil, err
 	}
 
 	return trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false)), nil
