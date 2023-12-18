@@ -977,7 +977,7 @@ type SubTrieAggregator struct {
 	accData        GenStructStepAccountData
 
 	// Used to construct an Account proof while calculating the tree root.
-	proofRetainer *ProofRetainer
+	proofRetainer ProofRetainer
 	rl            *RetainList
 	cutoff        bool
 }
@@ -989,6 +989,10 @@ func NewSubTrieAggregator(hc HashCollector2, shc StorageHashCollector2, trace bo
 		shc:   shc,
 		trace: trace,
 	}
+}
+
+func (r *SubTrieAggregator) SetProofRetainer(pr ProofRetainer) {
+	r.proofRetainer = pr
 }
 
 func (r *SubTrieAggregator) SetRetainList(rl *RetainList) {

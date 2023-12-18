@@ -488,7 +488,7 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		return nil, err
 	}
 
-	reader, err := rpchelper.CreateHistoryStateReader(tx, block.NumberU64(), 0, false, chainConfig.ChainName)
+	reader, err := rpchelper.CreateHistoryStateReader(tx, blockNr, 0, false, chainConfig.ChainName)
 	if err != nil {
 		return nil, err
 	}
@@ -500,6 +500,16 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 	trieStateWriter := tds.TrieStateWriter()
 
 	statedb := state.New(tds)
+
+	// var slotV uint256.Int
+	// var slotV2 uint256.Int
+	// slot := libcommon.HexToHash("0xe0ab2193e40c80a14d05812b70d9e17b2722b1b15a9a2b7ce4860cd58844cdea")
+	// slot2 := libcommon.HexToHash("0xabd7b398c2237712843e3e780dcd40dfb99446b30666f04c025da4efa5ce5177")
+	// statedb.GetState(libcommon.HexToAddress("0xec59ea1acb9fc9f630b2dce73790ed8be0ac036e"), &slot, &slotV)
+	// statedb.GetState(libcommon.HexToAddress("0xec59ea1acb9fc9f630b2dce73790ed8be0ac036e"), &slot2, &slotV2)
+
+	// fmt.Printf("slot %x %x\n", slot, slotV)
+	// fmt.Printf("slot %x %x\n", slot2, slotV2)
 
 	getHeader := func(hash libcommon.Hash, number uint64) *types.Header {
 		h, e := api._blockReader.Header(ctx, tx, hash, number)
@@ -559,6 +569,7 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int) (trie.SubTries, error) {
 		receiver := trie.NewSubTrieAggregator(nil, nil, false)
 		receiver.SetRetainList(rl)
+		receiver.SetProofRetainer(&trie.MultiAccountProofRetainer{Rl: rl})
 		subTrieloader := trie.NewFlatDBTrieLoader("eth_getWitness", rl, nil, nil, false, receiver)
 		subTries, err := subTrieloader.Result(tx, nil)
 

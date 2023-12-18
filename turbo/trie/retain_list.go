@@ -44,11 +44,31 @@ type RetainDeciderWithMarker interface {
 	RetainWithMarker(prefix []byte) (retain bool, nextMarkedKey []byte)
 }
 
-// ProofRetainer is a wrapper around the RetainList passed to the trie builder.
+// ProofRetainer is an interface that is used to retain proof elements during trie computation
+type ProofRetainer interface {
+	// ProofElement requests a new proof element for a given prefix. Returns nil if
+	// the prefix is not needed for the proof.
+	ProofElement(prefix []byte) *proofElement
+}
+
+type MultiAccountProofRetainer struct {
+	Rl *RetainList
+}
+
+func (pr *MultiAccountProofRetainer) ProofElement(prefix []byte) *proofElement {
+	if !pr.Rl.Retain(prefix) {
+		return nil
+	}
+	return &proofElement{
+		hexKey: prefix,
+	}
+}
+
+// DefaultProofRetainer is a wrapper around the RetainList passed to the trie builder.
 // It is responsible for aggregating proof values from the trie computation and
 // will return a valid accounts.AccProofresult after the trie root hash
 // calculation has completed.
-type ProofRetainer struct {
+type DefaultProofRetainer struct {
 	rl             *RetainList
 	addr           libcommon.Address
 	acc            *accounts.Account
@@ -63,7 +83,7 @@ type ProofRetainer struct {
 // storage keys are added to the given RetainList.  The ProofRetainer should be
 // set onto the FlatDBTrieLoader via SetProofRetainer before performing its Load
 // operation in order to appropriately collect the proof elements.
-func NewProofRetainer(addr libcommon.Address, a *accounts.Account, storageKeys []libcommon.Hash, rl *RetainList) (*ProofRetainer, error) {
+func NewProofRetainer(addr libcommon.Address, a *accounts.Account, storageKeys []libcommon.Hash, rl *RetainList) (*DefaultProofRetainer, error) {
 	addrHash, err := libcommon.HashData(addr[:])
 	if err != nil {
 		return nil, err
@@ -84,7 +104,7 @@ func NewProofRetainer(addr libcommon.Address, a *accounts.Account, storageKeys [
 		storageHexKeys[i] = rl.AddKey(compactEncoded[:])
 	}
 
-	return &ProofRetainer{
+	return &DefaultProofRetainer{
 		rl:             rl,
 		addr:           addr,
 		acc:            a,
@@ -98,7 +118,7 @@ func NewProofRetainer(addr libcommon.Address, a *accounts.Account, storageKeys [
 // element is retained by the ProofRetainer, and will be utilized to compute the
 // proof after the trie computation has completed.  The prefix is the standard
 // nibble encoded prefix used in the rest of the trie computations.
-func (pr *ProofRetainer) ProofElement(prefix []byte) *proofElement {
+func (pr *DefaultProofRetainer) ProofElement(prefix []byte) *proofElement {
 	if !pr.rl.Retain(prefix) {
 		return nil
 	}
@@ -128,7 +148,7 @@ func (pr *ProofRetainer) ProofElement(prefix []byte) *proofElement {
 // Balance, Nonce, and CodeHash from the account data supplied in the
 // constructor, the StorageHash, storageKey values, and proof elements are
 // supplied by the Load operation of the trie construction.
-func (pr *ProofRetainer) ProofResult() (*accounts.AccProofResult, error) {
+func (pr *DefaultProofRetainer) ProofResult() (*accounts.AccProofResult, error) {
 	result := &accounts.AccProofResult{
 		Address:  pr.addr,
 		Balance:  (*hexutil.Big)(pr.acc.Balance.ToBig()),
@@ -303,6 +323,11 @@ func (rl *RetainList) ensureInited() {
 // come in monotonically ascending order, we optimise for this, though
 // the function would still work if the order is different
 func (rl *RetainList) Retain(prefix []byte) bool {
+
+	if bytes.HasPrefix(prefix, libcommon.FromHex("0x0d05")) {
+		fmt.Println("here!!!!!")
+	}
+
 	rl.ensureInited()
 	if len(prefix) < rl.minLength {
 		return true

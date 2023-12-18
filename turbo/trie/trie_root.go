@@ -127,7 +127,7 @@ type RootHashAggregator struct {
 	accData        GenStructStepAccountData
 
 	// Used to construct an Account proof while calculating the tree root.
-	proofRetainer *ProofRetainer
+	proofRetainer *DefaultProofRetainer
 	cutoff        bool
 }
 
@@ -240,7 +240,6 @@ func (l *FlatDBTrieLoader[T]) Result(tx kv.Tx, quit <-chan struct{}) (T, error) 
 				return l.receiver.EmptyResult(), fmt.Errorf("fail DecodeForStorage: %w", err)
 			}
 
-			fmt.Printf("k %x, kHex %x\n", k, kHex)
 			if l.receiver.Legacy() {
 				if err = l.receiver.Receive(AccountStreamItem, k, nil, &l.accountValue, nil, nil, false, 0); err != nil {
 					return l.receiver.EmptyResult(), err
@@ -279,7 +278,6 @@ func (l *FlatDBTrieLoader[T]) Result(tx kv.Tx, quit <-chan struct{}) (T, error) 
 						break
 					}
 
-					fmt.Printf("accWithInc %x\n", accWithInc)
 					if l.receiver.Legacy() {
 						var sKey []byte
 						sKey = append(sKey, accWithInc...)
@@ -299,7 +297,6 @@ func (l *FlatDBTrieLoader[T]) Result(tx kv.Tx, quit <-chan struct{}) (T, error) 
 					break
 				}
 
-				fmt.Printf("accWithInc %x, ihKS: %x, len(ihKS): %d\n", accWithInc, ihKS, len(ihKS))
 				if err = l.receiver.Receive(SHashStreamItem, accWithInc, ihKS, nil, nil, ihVS, hasTreeS, 0); err != nil {
 					return l.receiver.EmptyResult(), err
 				}
@@ -320,7 +317,6 @@ func (l *FlatDBTrieLoader[T]) Result(tx kv.Tx, quit <-chan struct{}) (T, error) 
 			break
 		}
 
-		fmt.Printf("ihK %x\n", ihK)
 		if err = l.receiver.Receive(AHashStreamItem, ihK, nil, nil, nil, ihV, hasTree, 0); err != nil {
 			return l.receiver.EmptyResult(), err
 		}
@@ -346,7 +342,7 @@ func (l *FlatDBTrieLoader[T]) logProgress(accountKey, ihK []byte) {
 	log.Info(fmt.Sprintf("[%s] Calculating Merkle root", l.logPrefix), "current key", k)
 }
 
-func (r *RootHashAggregator) SetProofRetainer(pr *ProofRetainer) {
+func (r *RootHashAggregator) SetProofRetainer(pr *DefaultProofRetainer) {
 	r.proofRetainer = pr
 }
 
