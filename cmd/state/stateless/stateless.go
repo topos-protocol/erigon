@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"os"
 	"os/signal"
 	"strconv"
@@ -226,6 +227,9 @@ func Stateless(
 
 	genesis = core.DeveloperGenesisBlock(0, core.DevnetEtherbase)
 	chainConfig := genesis.Config
+
+	// Activate Shanghai from genesis
+	chainConfig.ShanghaiTime = big.NewInt(0)
 
 	fmt.Printf("Genesis: %+v\n", genesis)
 
@@ -496,7 +500,7 @@ func Stateless(
 				finalRootFail = true
 			} else if !binary {
 				if err = s.CheckRoot(header.Root); err != nil {
-					fmt.Printf("Wrong block hash %x in block %d\n", block.Hash(), blockNum)
+					fmt.Printf("Wrong block hash %x in block %d: %v\n", block.Hash(), blockNum, err)
 					finalRootFail = true
 				}
 			}
