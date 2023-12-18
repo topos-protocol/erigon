@@ -375,7 +375,7 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 		}
 		tx = batch
 	} else {
-		loader = trie.NewFlatDBTrieLoader("eth_getProof", rl, nil, nil, false, trie.NewRootHashAggregator(nil, nil, false))
+		loader = trie.NewFlatDBTrieLoader[libcommon.Hash]("eth_getProof", rl, nil, nil, false, trie.NewRootHashAggregator(nil, nil, false))
 	}
 
 	reader, err := rpchelper.CreateStateReader(ctx, tx, blockNrOrHash, 0, api.filters, api.stateCache, api.historyV3(tx), "")
@@ -570,7 +570,7 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		receiver := trie.NewSubTrieAggregator(nil, nil, false)
 		receiver.SetRetainList(rl)
 		receiver.SetProofRetainer(&trie.MultiAccountProofRetainer{Rl: rl})
-		subTrieloader := trie.NewFlatDBTrieLoader("eth_getWitness", rl, nil, nil, false, receiver)
+		subTrieloader := trie.NewFlatDBTrieLoader[trie.SubTries]("eth_getWitness", rl, nil, nil, false, receiver)
 		subTries, err := subTrieloader.Result(tx, nil)
 
 		rl.Rewind()

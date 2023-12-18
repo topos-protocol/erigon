@@ -169,7 +169,7 @@ func RegenerateIntermediateHashes(logPrefix string, db kv.RwTx, cfg TrieCfg, exp
 	defer stTrieCollector.Close()
 	stTrieCollectorFunc := storageTrieCollector(stTrieCollector)
 
-	loader := trie.NewFlatDBTrieLoader(logPrefix, trie.NewRetainList(0), accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false))
+	loader := trie.NewFlatDBTrieLoader[libcommon.Hash](logPrefix, trie.NewRetainList(0), accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false))
 	hash, err := loader.Result(db, ctx.Done())
 	if err != nil {
 		return trie.EmptyRoot, err
@@ -606,7 +606,7 @@ func IncrementIntermediateHashes(logPrefix string, s *StageState, db kv.RwTx, to
 	defer stTrieCollector.Close()
 	stTrieCollectorFunc := storageTrieCollector(stTrieCollector)
 
-	loader := trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false))
+	loader := trie.NewFlatDBTrieLoader[libcommon.Hash](logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false))
 	hash, err := loader.Result(db, quit)
 	if err != nil {
 		return trie.EmptyRoot, err
@@ -695,7 +695,7 @@ func UnwindIntermediateHashesForTrieLoader(logPrefix string, rl *trie.RetainList
 		return nil, err
 	}
 
-	return trie.NewFlatDBTrieLoader(logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false)), nil
+	return trie.NewFlatDBTrieLoader[libcommon.Hash](logPrefix, rl, accTrieCollectorFunc, stTrieCollectorFunc, false, trie.NewRootHashAggregator(accTrieCollectorFunc, stTrieCollectorFunc, false)), nil
 }
 
 func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *StageState, db kv.RwTx, cfg TrieCfg, expectedRootHash libcommon.Hash, quit <-chan struct{}, logger log.Logger) error {

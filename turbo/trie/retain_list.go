@@ -323,10 +323,9 @@ func (rl *RetainList) ensureInited() {
 // come in monotonically ascending order, we optimise for this, though
 // the function would still work if the order is different
 func (rl *RetainList) Retain(prefix []byte) bool {
-
-	if bytes.HasPrefix(prefix, libcommon.FromHex("0x0d05")) {
-		fmt.Println("here!!!!!")
-	}
+	// if bytes.HasPrefix(prefix, libcommon.FromHex("0x0d05")) {
+	// 	fmt.Println("here!!!!!")
+	// }
 
 	rl.ensureInited()
 	if len(prefix) < rl.minLength {
