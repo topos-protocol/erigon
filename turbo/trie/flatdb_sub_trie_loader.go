@@ -1149,8 +1149,8 @@ func (r *SubTrieAggregator) Receive(itemType StreamItem,
 				r.subTries.roots = append(r.subTries.roots, r.hb.root())
 				r.subTries.Hashes = append(r.subTries.Hashes, r.hb.rootHash())
 			} else {
-				// r.subTries.roots = append(r.subTries.roots, nil)
-				// r.subTries.Hashes = append(r.subTries.Hashes, libcommon.Hash{})
+				r.subTries.roots = append(r.subTries.roots, nil)
+				r.subTries.Hashes = append(r.subTries.Hashes, libcommon.Hash{})
 			}
 		}
 
@@ -1175,8 +1175,8 @@ func (r *SubTrieAggregator) Receive(itemType StreamItem,
 			r.subTries.Hashes = append(r.subTries.Hashes, r.hb.rootHash())
 		} else {
 			r.root = EmptyRoot
-			// r.subTries.roots = append(r.subTries.roots, nil)
-			// r.subTries.Hashes = append(r.subTries.Hashes, EmptyRoot)
+			r.subTries.roots = append(r.subTries.roots, nil)
+			r.subTries.Hashes = append(r.subTries.Hashes, EmptyRoot)
 		}
 		r.groups = r.groups[:0]
 		r.hasTree = r.hasTree[:0]
