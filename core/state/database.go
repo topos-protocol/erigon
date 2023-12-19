@@ -562,41 +562,43 @@ func (tds *TrieDbState) resolveAccountAndStorageTouches(accountTouches common.Ha
 		rl = tds.rl
 	}
 
-	for _, addrHash := range accountTouches {
-		rl.AddKey(addrHash[:])
-	}
+	// for _, addrHash := range accountTouches {
+	// 	rl.AddKey(addrHash[:])
+	// }
 
-	for _, sk := range storageTouches {
-		rl.AddKey(sk[:])
-	}
+	// for _, sk := range storageTouches {
+	// 	rl.AddKey(sk[:])
+	// }
 
 	// hookRl := trie.NewRetainList(0)
 
-	// for _, addrHash := range accountTouches {
-	// 	var incarnation uint64
-	// 	if inc, ok := tds.aggregateBuffer.accountReadsIncarnation[addrHash]; ok {
-	// 		incarnation = inc
-	// 	}
-	// 	var nibbles = make([]byte, 2*(length.Hash+length.Incarnation))
-	// 	for i, b := range addrHash[:] {
-	// 		nibbles[i*2] = b / 16
-	// 		nibbles[i*2+1] = b % 16
-	// 	}
-	// 	binary.BigEndian.PutUint64(bytes8[:], incarnation)
-	// 	for i, b := range bytes8[:] {
-	// 		nibbles[2*length.Hash+i*2] = b / 16
-	// 		nibbles[2*length.Hash+i*2+1] = b % 16
-	// 	}
-	// 	hookRl.AddHex(nibbles)
-	// }
-	// for _, storageKey := range storageTouches {
-	// 	var nibbles = make([]byte, 2*len(storageKey))
-	// 	for i, b := range storageKey[:] {
-	// 		nibbles[i*2] = b / 16
-	// 		nibbles[i*2+1] = b % 16
-	// 	}
-	// 	hookRl.AddHex(nibbles)
-	// }
+	for _, addrHash := range accountTouches {
+		var incarnation uint64
+		if inc, ok := tds.aggregateBuffer.accountReadsIncarnation[addrHash]; ok {
+			incarnation = inc
+		}
+		var nibbles = make([]byte, 2*(length.Hash+length.Incarnation))
+		for i, b := range addrHash[:] {
+			nibbles[i*2] = b / 16
+			nibbles[i*2+1] = b % 16
+		}
+		binary.BigEndian.PutUint64(bytes8[:], incarnation)
+		for i, b := range bytes8[:] {
+			nibbles[2*length.Hash+i*2] = b / 16
+			nibbles[2*length.Hash+i*2+1] = b % 16
+		}
+		rl.AddHex(nibbles)
+		rl.AddMarker(false)
+	}
+	for _, storageKey := range storageTouches {
+		var nibbles = make([]byte, 2*len(storageKey))
+		for i, b := range storageKey[:] {
+			nibbles[i*2] = b / 16
+			nibbles[i*2+1] = b % 16
+		}
+		rl.AddHex(nibbles)
+		rl.AddMarker(false)
+	}
 
 	// fmt.Printf("tds.t %x", tds.t.Root())
 

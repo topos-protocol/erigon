@@ -293,6 +293,10 @@ func (rl *RetainList) AddHex(hex []byte) {
 	rl.hexes = append(rl.hexes, hex)
 }
 
+func (rl *RetainList) AddMarker(marker bool) {
+	rl.markers = append(rl.markers, marker)
+}
+
 // AddCodeTouch adds a new code touch into the resolve set
 func (rl *RetainList) AddCodeTouch(codeHash libcommon.Hash) {
 	rl.codeTouches[codeHash] = struct{}{}
