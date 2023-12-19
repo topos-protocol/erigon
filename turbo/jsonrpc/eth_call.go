@@ -23,6 +23,7 @@ import (
 
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core"
+	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/core/types/accounts"
@@ -488,6 +489,8 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		return nil, err
 	}
 
+	header := block.Header()
+
 	reader, err := rpchelper.CreateHistoryStateReader(tx, blockNr, 0, false, chainConfig.ChainName)
 	if err != nil {
 		return nil, err
@@ -512,11 +515,8 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 	// fmt.Printf("slot %x %x\n", slot2, slotV2)
 
 	getHeader := func(hash libcommon.Hash, number uint64) *types.Header {
-		h, e := api._blockReader.Header(ctx, tx, hash, number)
-		if e != nil {
-			log.Error("getHeader error", "number", number, "hash", hash, "err", e)
-		}
-		return h
+		fmt.Println("Getting header...")
+		return rawdb.ReadHeader(tx, hash, number)
 	}
 
 	getHashFn := core.GetHashFn(block.Header(), getHeader)
@@ -532,7 +532,7 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		return nil, fmt.Errorf("engine is not consensus.Engine")
 	}
 
-	chainReader := stagedsync.ChainReader{Cfg: *chainConfig, Db: tx, BlockReader: api._blockReader}
+	chainReader := stagedsync.NewChainReaderImpl(chainConfig, tx, nil, nil)
 
 	if err := core.InitializeBlockExecution(engine, chainReader, block.Header(), chainConfig, statedb, trieStateWriter, nil); err != nil {
 		if err != nil {
@@ -546,7 +546,8 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 
 	vmConfig := vm.Config{}
 
-	for _, tx := range block.Transactions() {
+	for i, tx := range block.Transactions() {
+		statedb.SetTxContext(tx.Hash(), block.Hash(), i)
 		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, api.engine(), nil, gp, statedb, trieStateWriter, block.Header(), tx, usedGas, usedBlobGas, vmConfig)
 		if err != nil {
 			return nil, err
@@ -557,6 +558,27 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		}
 
 		receipts = append(receipts, receipt)
+	}
+
+	receiptSha := types.DeriveSha(receipts)
+	if !vmConfig.StatelessExec && chainConfig.IsByzantium(header.Number.Uint64()) && !vmConfig.NoReceipts && receiptSha != block.ReceiptHash() {
+		return nil, fmt.Errorf("mismatched receipt headers for block %d (%s != %s)", block.NumberU64(), receiptSha.Hex(), block.ReceiptHash().Hex())
+	}
+
+	if !vmConfig.StatelessExec && *usedGas != header.GasUsed {
+		return nil, fmt.Errorf("gas used by execution: %d, in header: %d", *usedGas, header.GasUsed)
+	}
+
+	if header.BlobGasUsed != nil && *usedBlobGas != *header.BlobGasUsed {
+		return nil, fmt.Errorf("blob gas used by execution: %d, in header: %d", *usedBlobGas, *header.BlobGasUsed)
+	}
+
+	var bloom types.Bloom
+	if !vmConfig.NoReceipts {
+		bloom = types.CreateBloom(receipts)
+		if !vmConfig.StatelessExec && bloom != header.Bloom {
+			return nil, fmt.Errorf("bloom computed by execution: %x, in header: %x", bloom, header.Bloom)
+		}
 	}
 
 	if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
@@ -619,9 +641,7 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 	ibs := state.New(s)
 	s.SetBlockNr(blockNr)
 
-	header := block.Header()
-
-	gp = new(core.GasPool).AddGas(block.GasLimit())
+	gp = new(core.GasPool).AddGas(block.GasLimit()).AddBlobGas(chainConfig.GetMaxBlobGasPerBlock())
 	usedGas = new(uint64)
 	receipts = types.Receipts{}
 
@@ -629,7 +649,8 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		return nil, err
 	}
 
-	for _, tx := range block.Transactions() {
+	for i, tx := range block.Transactions() {
+		ibs.SetTxContext(tx.Hash(), block.Hash(), i)
 		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, ibs, s, header, tx, usedGas, nil, vmConfig)
 		if err != nil {
 			return nil, fmt.Errorf("tx %x failed: %v", tx.Hash(), err)
@@ -638,7 +659,8 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 	}
 
 	if !vmConfig.ReadOnly {
-		if _, _, _, err := engine.FinalizeAndAssemble(chainConfig, block.Header(), ibs, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
+		_, _, _, err := engine.FinalizeAndAssemble(chainConfig, block.Header(), ibs, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil)
+		if err != nil {
 			return nil, err
 		}
 
@@ -649,6 +671,10 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		if err := ibs.CommitBlock(rules, s); err != nil {
 			return nil, fmt.Errorf("committing block %d failed: %v", block.NumberU64(), err)
 		}
+	}
+
+	if err = s.CheckRoot(header.Root); err != nil {
+		return nil, err
 	}
 
 	roots, err := tds.UpdateStateTrie()

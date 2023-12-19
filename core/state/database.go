@@ -562,9 +562,9 @@ func (tds *TrieDbState) resolveAccountAndStorageTouches(accountTouches common.Ha
 		rl = tds.rl
 	}
 
-	// for _, addrHash := range accountTouches {
-	// 	rl.AddKey(addrHash[:])
-	// }
+	for _, addrHash := range accountTouches {
+		rl.AddKey(addrHash[:])
+	}
 
 	// for _, sk := range storageTouches {
 	// 	rl.AddKey(sk[:])
