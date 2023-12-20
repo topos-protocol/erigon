@@ -56,7 +56,7 @@ type MultiAccountProofRetainer struct {
 }
 
 func (pr *MultiAccountProofRetainer) ProofElement(prefix []byte) *proofElement {
-	if !pr.Rl.Retain(prefix) {
+	if !pr.Rl.Retain(prefix) && ((len(prefix) > 1) && !pr.Rl.Retain(prefix[:len(prefix)-2])) {
 		return nil
 	}
 	return &proofElement{
