@@ -407,7 +407,11 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 }
 
 func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (hexutility.Bytes, error) {
-	tx, err := api.db.BeginRo(ctx)
+	return api.getWitness(ctx, api.db, blockNrOrHash, api.logger)
+}
+
+func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, logger log.Logger) (hexutility.Bytes, error) {
+	tx, err := db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -461,9 +465,6 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 	rl := trie.NewRetainList(0)
 
 	if blockNr-1 < latestBlock {
-		if latestBlock-blockNr > uint64(api.MaxGetProofRewindBlockCount) {
-			return nil, fmt.Errorf("requested block is too old, block must be within %d blocks of the head block number (currently %d)", uint64(api.MaxGetProofRewindBlockCount), latestBlock)
-		}
 		batch := membatchwithdb.NewMemoryBatch(tx, api.dirs.Tmp)
 		defer batch.Rollback()
 
@@ -471,12 +472,12 @@ func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		stageState := &stagedsync.StageState{BlockNumber: latestBlock}
 
 		hashStageCfg := stagedsync.StageHashStateCfg(nil, api.dirs, api.historyV3(batch))
-		if err := stagedsync.UnwindHashStateStage(unwindState, stageState, batch, hashStageCfg, ctx, api.logger); err != nil {
+		if err := stagedsync.UnwindHashStateStage(unwindState, stageState, batch, hashStageCfg, ctx, logger); err != nil {
 			return nil, err
 		}
 
 		interHashStageCfg := stagedsync.StageTrieCfg(nil, false, false, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(batch), api._agg)
-		err = stagedsync.UnwindIntermediateHashes("eth_getWitness", rl, unwindState, stageState, batch, interHashStageCfg, ctx.Done(), api.logger)
+		err = stagedsync.UnwindIntermediateHashes("eth_getWitness", rl, unwindState, stageState, batch, interHashStageCfg, ctx.Done(), logger)
 		if err != nil {
 			return nil, err
 		}

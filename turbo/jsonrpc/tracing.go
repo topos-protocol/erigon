@@ -1,9 +1,7 @@
 package jsonrpc
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -11,10 +9,8 @@ import (
 
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/log/v3"
 
-	"github.com/ledgerwatch/erigon/cmd/state/stateless"
 	"github.com/ledgerwatch/erigon/core/vm/evmtypes"
 
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
@@ -29,7 +25,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/adapter/ethapi"
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
-	"github.com/ledgerwatch/erigon/turbo/trie"
 
 	jsoniter "github.com/json-iterator/go"
 )
@@ -182,30 +177,10 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		stream.WriteObjectStart()
 		stream.WriteObjectField("block_witness")
 
-		k := make([]byte, 8)
-
-		binary.LittleEndian.PutUint64(k[:], block.NumberU64())
-
-		var witness_bytes []byte
-
-		if block.NumberU64() > 0 {
-			witness_bytes, err = stateless.ReadChunks(tx, kv.Witnesses, k)
-		} else {
-			w := trie.NewWitness(make([]trie.WitnessOperator, 0))
-
-			var buf bytes.Buffer
-			_, err = w.WriteInto(&buf)
-			if err != nil {
-				log.Warn("error while writing empty witness to buffer", "err", err)
-				stream.WriteNil()
-				return err
-			}
-
-			witness_bytes = buf.Bytes()
-		}
+		witness_bytes, err := api.getWitness(ctx, api.db, blockNrOrHash, log.Root())
 
 		if err != nil {
-			log.Warn("error while reading witness from db", "err", err)
+			log.Warn("error while getting witness", "err", err)
 			stream.WriteNil()
 			return err
 		}
