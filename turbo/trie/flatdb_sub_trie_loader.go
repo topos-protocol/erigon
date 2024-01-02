@@ -1236,7 +1236,7 @@ func (r *SubTrieAggregator) genStructStorage() error {
 			return r.proofRetainer.ProofElement(fullKey[:baseKeyLen+len(prefix)])
 		}
 	}
-	r.groupsStorage, r.hasTreeStorage, r.hasHashStorage, err = GenStructStepEx(r.rl.Retain, r.currStorage.Bytes(), r.succStorage.Bytes(), r.hb, func(keyHex []byte, hasState, hasTree, hasHash uint16, hashes, rootHash []byte) error {
+	r.groupsStorage, r.hasTreeStorage, r.hasHashStorage, err = GenStructStepEx(r.RetainNothing, r.currStorage.Bytes(), r.succStorage.Bytes(), r.hb, func(keyHex []byte, hasState, hasTree, hasHash uint16, hashes, rootHash []byte) error {
 		if r.shc == nil {
 			return nil
 		}
@@ -1311,7 +1311,7 @@ func (r *SubTrieAggregator) genStructAccount() error {
 	if r.proofRetainer != nil {
 		wantProof = r.proofRetainer.ProofElement
 	}
-	if r.groups, r.hasTree, r.hasHash, err = GenStructStepEx(r.rl.Retain, r.curr.Bytes(), r.succ.Bytes(), r.hb, func(keyHex []byte, hasState, hasTree, hasHash uint16, hashes, rootHash []byte) error {
+	if r.groups, r.hasTree, r.hasHash, err = GenStructStepEx(r.RetainNothing, r.curr.Bytes(), r.succ.Bytes(), r.hb, func(keyHex []byte, hasState, hasTree, hasHash uint16, hashes, rootHash []byte) error {
 		if r.hc == nil {
 			return nil
 		}
