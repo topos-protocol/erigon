@@ -591,6 +591,12 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 			return receiver.EmptyResult(), err
 		}
 
+		// Reverse the subTries.Hashes and subTries.roots
+		for i, j := 0, len(subTries.Hashes)-1; i < j; i, j = i+1, j-1 {
+			subTries.Hashes[i], subTries.Hashes[j] = subTries.Hashes[j], subTries.Hashes[i]
+			subTries.Roots()[i], subTries.Roots()[j] = subTries.Roots()[j], subTries.Roots()[i]
+		}
+
 		return subTries, nil
 	}
 

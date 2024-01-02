@@ -424,11 +424,8 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 	hasTree bool,
 	cutoff int,
 ) error {
-	fmt.Printf("Receive itemType %d, accountKey %x, storageKey %x, storageValue %x, hash %x, hasTree %v, cutoff %d\n", itemType, accountKey, storageKey, storageValue, hash, hasTree, cutoff)
-
 	switch itemType {
 	case StorageStreamItem:
-		fmt.Println("StorageStreamItem")
 		dr.advanceKeysStorage(storageKey, true /* terminator */)
 		if dr.currStorage.Len() > 0 {
 			if err := dr.genStructStorage(); err != nil {
@@ -437,7 +434,6 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 		}
 		dr.saveValueStorage(false, storageValue, hash)
 	case SHashStreamItem:
-		fmt.Println("SHashStreamItem")
 		if len(accountKey) == 0 {
 			dr.advanceKeysStorage(storageKey, false /* terminator */)
 		} else {
@@ -458,10 +454,8 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 		}
 		dr.saveValueStorage(true, storageValue, hash)
 	case AccountStreamItem:
-		fmt.Println("AccountStreamItem")
 		dr.advanceKeysAccount(accountKey, true /* terminator */)
 		if dr.curr.Len() > 0 && !dr.wasIH {
-			fmt.Printf("In AccountStreamItem, dr.curr.Len() > 0 && !dr.wasIH\n")
 			dr.cutoffKeysStorage(2 * (length.Hash + common.IncarnationLength))
 			if dr.currStorage.Len() > 0 {
 				if err := dr.genStructStorage(); err != nil {
@@ -491,7 +485,6 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 			return err
 		}
 	case AHashStreamItem:
-		fmt.Println("AHashStreamItem")
 		dr.advanceKeysAccount(accountKey, false /* terminator */)
 		if dr.curr.Len() > 0 && !dr.wasIH {
 			dr.cutoffKeysStorage(2 * (length.Hash + common.IncarnationLength))
@@ -523,7 +516,6 @@ func (dr *DefaultReceiver) Receive(itemType StreamItem,
 			return err
 		}
 	case CutoffStreamItem:
-		fmt.Println("CutoffStreamItem")
 		if dr.trace {
 			fmt.Printf("storage cuttoff %d\n", cutoff)
 		}
@@ -721,8 +713,6 @@ func (dr *DefaultReceiver) advanceKeysStorage(k []byte, terminator bool) {
 	dr.succStorage.Reset()
 	// Transform k to nibbles, but skip the incarnation part in the middle
 	keyToNibbles(k, &dr.succStorage)
-
-	fmt.Printf("advanceKeysStorage k %x, dr.succStorage %x\n", k, dr.succStorage.Bytes())
 
 	if terminator {
 		dr.succStorage.WriteByte(16)

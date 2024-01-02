@@ -790,8 +790,8 @@ func (t *Trie) getNode(hex []byte, doTouch bool) (node, node, bool, uint64) {
 
 func (t *Trie) HookSubTries(subTries SubTries, hooks [][]byte) error {
 	for i, hookNibbles := range hooks {
-		root := subTries.roots[len(subTries.roots)-i-1]
-		hash := subTries.Hashes[len(subTries.Hashes)-i-1]
+		root := subTries.roots[i]
+		hash := subTries.Hashes[i]
 		if root == nil {
 			return fmt.Errorf("root==nil for hook %x", hookNibbles)
 		}
