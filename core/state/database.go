@@ -544,7 +544,7 @@ func (tds *TrieDbState) resolveCodeTouches(
 	}
 
 	if !firstRequest {
-		if _, err := loadFunc(tds.loader, tds.rl, nil, nil); err != nil {
+		if _, err := loadFunc(tds.loader, tds.rl, nil, nil, nil); err != nil {
 			return err
 		}
 	}
@@ -561,6 +561,8 @@ func (tds *TrieDbState) resolveAccountAndStorageTouches(accountTouches common.Ha
 	} else {
 		rl = tds.rl
 	}
+
+	accountNibbles := make([][]byte, len(accountTouches))
 
 	for _, addrHash := range accountTouches {
 		rl.AddKey(addrHash[:])
@@ -579,6 +581,8 @@ func (tds *TrieDbState) resolveAccountAndStorageTouches(accountTouches common.Ha
 			nibbles[2*length.Hash+i*2] = b / 16
 			nibbles[2*length.Hash+i*2+1] = b % 16
 		}
+
+		accountNibbles = append(accountNibbles, nibbles)
 		rl.AddHex(nibbles)
 		rl.AddMarker(false)
 	}
@@ -614,7 +618,7 @@ func (tds *TrieDbState) resolveAccountAndStorageTouches(accountTouches common.Ha
 	// FindSubTriesToLoad would have gone through the entire rs, so we need to rewind to the beginning
 	rl.Rewind()
 	loader := trie.NewSubTrieLoader(tds.blockNr)
-	subTries, err := loadFunc(loader, rl, dbPrefixes, fixedbits)
+	subTries, err := loadFunc(loader, rl, dbPrefixes, fixedbits, accountNibbles)
 
 	// log.Warn("SubTries", "Hashes", subTries.Hashes, "Roots", subTries.Roots(), "accountTouches", accountTouches, "storageTouches", storageTouches, "dbPrefixes", dbPrefixes, "fixedbits", fixedbits, "hooks", hooks)
 
@@ -698,7 +702,7 @@ func (tds *TrieDbState) ResolveStateTrieWithFunc(loadFunc trie.LoadFunc) error {
 func (tds *TrieDbState) ResolveStateTrie(extractWitnesses bool, trace bool) ([]*trie.Witness, error) {
 	var witnesses []*trie.Witness
 
-	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int) (trie.SubTries, error) {
+	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int, accountNibbles [][]byte) (trie.SubTries, error) {
 		if loader == nil {
 			return trie.SubTries{}, nil
 		}
@@ -728,7 +732,7 @@ func (tds *TrieDbState) ResolveStateTrie(extractWitnesses bool, trace bool) ([]*
 // ResolveStateTrieStateless uses a witness DB to resolve subtries
 func (tds *TrieDbState) ResolveStateTrieStateless(database trie.WitnessStorage) error {
 	var startPos int64
-	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int) (trie.SubTries, error) {
+	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int, accountNibbles [][]byte) (trie.SubTries, error) {
 		if loader == nil {
 			return trie.SubTries{}, nil
 		}

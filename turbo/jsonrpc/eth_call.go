@@ -571,11 +571,13 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 
 	statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), block.Header().Time), trieStateWriter)
 
-	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int) (trie.SubTries, error) {
+	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int, accountNibbles [][]byte) (trie.SubTries, error) {
 		rl.Rewind()
 		receiver := trie.NewSubTrieAggregator(nil, nil, false)
 		receiver.SetRetainList(rl)
-		receiver.SetProofRetainer(&trie.MultiAccountProofRetainer{Rl: rl})
+		pr := trie.NewMultiAccountProofRetainer(rl)
+		pr.AccHexKeys = accountNibbles
+		receiver.SetProofRetainer(pr)
 		subTrieloader := trie.NewFlatDBTrieLoader[trie.SubTries]("eth_getWitness", rl, nil, nil, false, receiver)
 		subTries, err := subTrieloader.Result(tx, nil)
 

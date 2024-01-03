@@ -52,13 +52,40 @@ type ProofRetainer interface {
 }
 
 type MultiAccountProofRetainer struct {
-	Rl *RetainList
+	AccHexKeys [][]byte
+	Rl         *RetainList
+}
+
+func NewMultiAccountProofRetainer(rl *RetainList) *MultiAccountProofRetainer {
+	return &MultiAccountProofRetainer{
+		AccHexKeys: make([][]byte, 0),
+		Rl:         rl,
+	}
 }
 
 func (pr *MultiAccountProofRetainer) ProofElement(prefix []byte) *proofElement {
 	if !pr.Rl.Retain(prefix) && ((len(prefix) > 1) && !pr.Rl.Retain(prefix[:len(prefix)-2])) {
 		return nil
 	}
+
+	found := false
+
+	for _, accHexKey := range pr.AccHexKeys {
+		if bytes.HasPrefix(accHexKey, prefix) {
+			found = true
+			break
+		}
+
+		if bytes.HasPrefix(prefix, accHexKey) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil
+	}
+
 	return &proofElement{
 		hexKey: prefix,
 	}

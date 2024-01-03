@@ -20,7 +20,7 @@ func (st SubTries) Roots() []node {
 	return st.roots
 }
 
-type LoadFunc func(*SubTrieLoader, *RetainList, [][]byte, []int) (SubTries, error)
+type LoadFunc func(*SubTrieLoader, *RetainList, [][]byte, []int, [][]byte) (SubTries, error)
 
 // Resolver looks up (resolves) some keys and corresponding values from a database.
 // One resolver per trie (prefix).
