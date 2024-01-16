@@ -407,10 +407,14 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 }
 
 func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (hexutility.Bytes, error) {
-	return api.getWitness(ctx, api.db, blockNrOrHash, api.logger)
+	return api.getWitness(ctx, api.db, blockNrOrHash, 0, true, api.logger)
 }
 
-func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, logger log.Logger) (hexutility.Bytes, error) {
+func (api *APIImpl) GetTxWitness(ctx context.Context, blockNr rpc.BlockNumberOrHash, txIndex hexutil.Uint) (hexutility.Bytes, error) {
+	return api.getWitness(ctx, api.db, blockNr, txIndex, false, api.logger)
+}
+
+func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, txIndex hexutil.Uint, fullBlock bool, logger log.Logger) (hexutility.Bytes, error) {
 	tx, err := db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -445,6 +449,10 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 	}
 	if block == nil {
 		return nil, nil
+	}
+
+	if !fullBlock && int(txIndex) >= len(block.Transactions()) {
+		return nil, fmt.Errorf("transaction index out of bounds")
 	}
 
 	prevHeader, err := api._blockReader.HeaderByNumber(ctx, tx, blockNr-1)
@@ -505,16 +513,6 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 
 	statedb := state.New(tds)
 
-	// var slotV uint256.Int
-	// var slotV2 uint256.Int
-	// slot := libcommon.HexToHash("0xe0ab2193e40c80a14d05812b70d9e17b2722b1b15a9a2b7ce4860cd58844cdea")
-	// slot2 := libcommon.HexToHash("0xabd7b398c2237712843e3e780dcd40dfb99446b30666f04c025da4efa5ce5177")
-	// statedb.GetState(libcommon.HexToAddress("0xec59ea1acb9fc9f630b2dce73790ed8be0ac036e"), &slot, &slotV)
-	// statedb.GetState(libcommon.HexToAddress("0xec59ea1acb9fc9f630b2dce73790ed8be0ac036e"), &slot2, &slotV2)
-
-	// fmt.Printf("slot %x %x\n", slot, slotV)
-	// fmt.Printf("slot %x %x\n", slot2, slotV2)
-
 	getHeader := func(hash libcommon.Hash, number uint64) *types.Header {
 		h, e := api._blockReader.Header(ctx, tx, hash, number)
 		if e != nil {
@@ -550,27 +548,6 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 
 	vmConfig := vm.Config{}
 
-	for i, txn := range block.Transactions() {
-		statedb.SetTxContext(txn.Hash(), block.Hash(), i)
-		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, api.engine(), nil, gp, statedb, trieStateWriter, block.Header(), txn, usedGas, usedBlobGas, vmConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		if !chainConfig.IsByzantium(block.NumberU64()) {
-			tds.StartNewBuffer()
-		}
-
-		receipts = append(receipts, receipt)
-	}
-
-	if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
-		fmt.Printf("Finalize of block %d failed: %v\n", blockNr, err)
-		return nil, err
-	}
-
-	statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), block.Header().Time), trieStateWriter)
-
 	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int, accountNibbles [][]byte) (trie.SubTries, error) {
 		rl.Rewind()
 		receiver := trie.NewSubTrieAggregator(nil, nil, false)
@@ -602,9 +579,50 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		return subTries, nil
 	}
 
+	for i, txn := range block.Transactions() {
+		statedb.SetTxContext(txn.Hash(), block.Hash(), i)
+
+		if !fullBlock && i == int(txIndex) && txIndex > 0 {
+			err = tds.ResolveStateTrieWithFunc(loadFunc)
+			if err != nil {
+				panic(err)
+			}
+			_, err = tds.UpdateStateTrie()
+
+			if err != nil {
+				panic(err)
+			}
+			tds.StartNewBuffer()
+		}
+
+		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, api.engine(), nil, gp, statedb, trieStateWriter, block.Header(), txn, usedGas, usedBlobGas, vmConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		if !fullBlock && i == int(txIndex) {
+			break
+		}
+
+		if !chainConfig.IsByzantium(block.NumberU64()) {
+			tds.StartNewBuffer()
+		}
+
+		receipts = append(receipts, receipt)
+	}
+
+	if fullBlock || (int(txIndex) == len(block.Transactions())-1) {
+		if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
+			fmt.Printf("Finalize of block %d failed: %v\n", blockNr, err)
+			return nil, err
+		}
+
+		statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), block.Header().Time), trieStateWriter)
+	}
+
 	triePreroot := tds.LastRoot()
 
-	if !bytes.Equal(prevHeader.Root[:], triePreroot[:]) {
+	if fullBlock && !bytes.Equal(prevHeader.Root[:], triePreroot[:]) {
 		return nil, fmt.Errorf("mismatch in expected state root computed %v vs %v indicates bug in witness implementation", prevHeader.Root, triePreroot)
 	}
 
@@ -622,6 +640,10 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 	_, err = w.WriteInto(&buf)
 	if err != nil {
 		return nil, err
+	}
+
+	if !fullBlock {
+		return buf.Bytes(), nil
 	}
 
 	nw, err := trie.NewWitnessFromReader(bytes.NewReader(buf.Bytes()), false)

@@ -386,7 +386,7 @@ func (tds *TrieDbState) UpdateStateTrie() ([]common.Hash, error) {
 	defer tds.tMu.Unlock()
 
 	roots, err := tds.updateTrieRoots(true)
-	tds.clearUpdates()
+	tds.ClearUpdates()
 	return roots, err
 }
 
@@ -872,7 +872,7 @@ func (tds *TrieDbState) updateTrieRoots(forward bool) ([]common.Hash, error) {
 	return roots, nil
 }
 
-func (tds *TrieDbState) clearUpdates() {
+func (tds *TrieDbState) ClearUpdates() {
 	tds.buffers = nil
 	tds.currentBuffer = nil
 	tds.aggregateBuffer = nil
