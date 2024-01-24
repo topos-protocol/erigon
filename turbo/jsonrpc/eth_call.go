@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 
 	"github.com/holiman/uint256"
@@ -36,6 +38,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/ledgerwatch/erigon/visual"
 )
 
 var latestNumOrHash = rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
@@ -643,6 +646,42 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 	}
 
 	if !fullBlock {
+		filename := fmt.Sprintf("state_%d.dot", blockNr)
+		f, err := os.Create(filename)
+		if err != nil {
+			return nil, err
+		}
+		indexColors := visual.HexIndexColors
+		fontColors := visual.HexFontColors
+		visual.StartGraph(f, false)
+
+		targetAccount := libcommon.HexToAddress("0xba386a4ca26b85fd057ab1ef86e3dc7bdeb5ce70")
+		accountHash, err := common.HashData(targetAccount[:])
+
+		if err != nil {
+			return nil, err
+		}
+
+		node, found := tds.Trie().GetAccountStorage(accountHash[:])
+
+		if !found {
+			return nil, fmt.Errorf("account %s not found", targetAccount.String())
+		}
+
+		trie.VisualNode(*node, f, &trie.VisualOpts{
+			Highlights:     nil,
+			IndexColors:    indexColors,
+			FontColors:     fontColors,
+			Values:         true,
+			CutTerminals:   0,
+			CodeCompressed: false,
+			ValCompressed:  false,
+			ValHex:         true,
+		})
+		visual.EndGraph(f)
+		if err := f.Close(); err != nil {
+			return nil, err
+		}
 		return buf.Bytes(), nil
 	}
 
