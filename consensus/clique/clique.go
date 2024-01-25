@@ -22,13 +22,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
-	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 	"io"
 	"math/big"
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon-lib/kv/dbutils"
 
 	"github.com/goccy/go-json"
 	lru "github.com/hashicorp/golang-lru/arc/v2"
@@ -201,6 +202,7 @@ type Clique struct {
 // New creates a Clique proof-of-authority consensus engine with the initial
 // signers set to the ones provided by the user.
 func New(cfg *chain.Config, snapshotConfig *params.ConsensusSnapshotConfig, cliqueDB kv.RwDB, logger log.Logger) *Clique {
+	logger.Info(">>>>>>>>> Clicque New <<<<<<<<<<<<<<<")
 	config := cfg.Clique
 
 	// Set any missing consensus parameters to their defaults
@@ -256,11 +258,13 @@ func (c *Clique) Type() chain.ConsensusName {
 // This is thread-safe (only access the header, as well as signatures, which
 // are lru.ARCCache, which is thread-safe)
 func (c *Clique) Author(header *types.Header) (libcommon.Address, error) {
+	c.logger.Info(">>>>>>>>> Clicque Author <<<<<<<<<<<<<<<")
 	return ecrecover(header, c.signatures)
 }
 
 // VerifyHeader checks whether a header conforms to the consensus rules.
 func (c *Clique) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header, _ bool) error {
+	c.logger.Info(">>>>>>>>> Clicque VerifyHeader <<<<<<<<<<<<<<<")
 	return c.verifyHeader(chain, header, nil)
 }
 
@@ -285,6 +289,7 @@ func (c *Clique) VerifyUncles(chain consensus.ChainReader, header *types.Header,
 // VerifySeal implements consensus.Engine, checking whether the signature contained
 // in the header satisfies the consensus protocol requirements.
 func (c *Clique) VerifySeal(chain consensus.ChainHeaderReader, header *types.Header) error {
+	c.logger.Info(">>>>>>>>> Clicque VerifySeal <<<<<<<<<<<<<<<")
 
 	snap, err := c.Snapshot(chain, header.Number.Uint64(), header.Hash(), nil)
 	if err != nil {
@@ -296,6 +301,7 @@ func (c *Clique) VerifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
 func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState) error {
+	c.logger.Info(">>>>>>>>> Clicque Prepare <<<<<<<<<<<<<<<")
 
 	// If the block isn't a checkpoint, cast a random vote (good enough for now)
 	header.Coinbase = libcommon.Address{}
@@ -367,6 +373,7 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 
 func (c *Clique) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
 	state *state.IntraBlockState, syscall consensus.SysCallCustom, logger log.Logger) {
+	c.logger.Info(">>>>>>>>> Clicque Initialize <<<<<<<<<<<<<<<")
 }
 
 func (c *Clique) CalculateRewards(config *chain.Config, header *types.Header, uncles []*types.Header, syscall consensus.SystemCall,
@@ -380,6 +387,7 @@ func (c *Clique) Finalize(config *chain.Config, header *types.Header, state *sta
 	txs types.Transactions, uncles []*types.Header, r types.Receipts, withdrawals []*types.Withdrawal,
 	chain consensus.ChainReader, syscall consensus.SystemCall, logger log.Logger,
 ) (types.Transactions, types.Receipts, error) {
+	c.logger.Info(">>>>>>>>> Clicque Finalize <<<<<<<<<<<<<<<")
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.UncleHash = types.CalcUncleHash(nil)
 	return txs, r, nil
@@ -391,6 +399,7 @@ func (c *Clique) FinalizeAndAssemble(chainConfig *chain.Config, header *types.He
 	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
 	chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger,
 ) (*types.Block, types.Transactions, types.Receipts, error) {
+	c.logger.Info(">>>>>>>>> Clicque FinalizeAndAssemble <<<<<<<<<<<<<<<")
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.UncleHash = types.CalcUncleHash(nil)
 
@@ -403,6 +412,7 @@ func (c *Clique) FinalizeAndAssemble(chainConfig *chain.Config, header *types.He
 func (c *Clique) Authorize(signer libcommon.Address, signFn SignerFn) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	c.logger.Info(">>>>>>>>> Clicque Authorize <<<<<<<<<<<<<<<")
 
 	c.signer = signer
 	c.signFn = signFn
@@ -411,7 +421,7 @@ func (c *Clique) Authorize(signer libcommon.Address, signFn SignerFn) {
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-
+	c.logger.Info(">>>>>>>>> Clicque Seal <<<<<<<<<<<<<<<")
 	header := block.Header()
 
 	// Sealing the genesis block is not supported
@@ -421,7 +431,7 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 	}
 	// For 0-period chains, refuse to seal empty blocks (no reward but would spin sealing)
 	if c.config.Period == 0 && len(block.Transactions()) == 0 {
-		c.logger.Info("Sealing paused, waiting for transactions")
+		c.logger.Info("Sealing paused, waiting for transactions >>>>>>>>>>")
 		return nil
 	}
 	// Don't hold the signer fields for the entire sealing procedure
@@ -491,7 +501,7 @@ func (c *Clique) GenerateSeal(chain consensus.ChainHeaderReader, currnt, parent 
 // * DIFF_NOTURN(2) if BLOCK_NUMBER % SIGNER_COUNT != SIGNER_INDEX
 // * DIFF_INTURN(1) if BLOCK_NUMBER % SIGNER_COUNT == SIGNER_INDEX
 func (c *Clique) CalcDifficulty(chain consensus.ChainHeaderReader, _, _ uint64, _ *big.Int, parentNumber uint64, parentHash, _ libcommon.Hash, _ uint64) *big.Int {
-
+	c.logger.Info(">>>>>>>>> Clicque CalcDifficulty <<<<<<<<<<<<<<<")
 	snap, err := c.Snapshot(chain, parentNumber, parentHash, nil)
 	if err != nil {
 		return nil
@@ -511,6 +521,7 @@ func calcDifficulty(snap *Snapshot, signer libcommon.Address) *big.Int {
 
 // SealHash returns the hash of a block prior to it being sealed.
 func (c *Clique) SealHash(header *types.Header) libcommon.Hash {
+	c.logger.Info(">>>>>>>>> Clicque SealHash <<<<<<<<<<<<<<<")
 	return SealHash(header)
 }
 
@@ -520,6 +531,7 @@ func (c *Clique) IsServiceTransaction(sender libcommon.Address, syscall consensu
 
 // Close implements consensus.Engine. It's a noop for clique as there are no background threads.
 func (c *Clique) Close() error {
+	c.logger.Info(">>>>>>>>> Clicque Close <<<<<<<<<<<<<<<")
 	libcommon.SafeClose(c.exitCh)
 	return nil
 }

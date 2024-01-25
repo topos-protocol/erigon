@@ -140,6 +140,7 @@ func (api *API) GetSignersAtHash(ctx context.Context, hash libcommon.Hash) ([]li
 
 // Proposals returns the current proposals the node tries to uphold and vote on.
 func (api *API) Proposals() map[libcommon.Address]bool {
+	
 	api.clique.lock.RLock()
 	defer api.clique.lock.RUnlock()
 
