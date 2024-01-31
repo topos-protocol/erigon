@@ -69,7 +69,7 @@ func blocksIO(db kv.RoDB, snapshotPath string) (services.FullBlockReader, *block
 
 	snapshotCfg := ethconfig.NewSnapCfg(true, true, false)
 
-	allSnapshots := freezeblocks.NewRoSnapshots(snapshotCfg, snapshotPath, log.New())
+	allSnapshots := freezeblocks.NewRoSnapshots(snapshotCfg, snapshotPath, 0, log.Root())
 
 	allSnapshots.OptimisticalyReopenWithDB(db)
 
@@ -216,7 +216,7 @@ func (p *ExportFileBlockProvider) WriteHeader(h *types.Header) {
 		}
 		defer tx.Rollback()
 
-		batch := membatchwithdb.NewMemoryBatch(tx, "")
+		batch := membatchwithdb.NewMemoryBatch(tx, "", log.Root())
 		defer batch.Rollback()
 		if err != nil {
 			panic(fmt.Errorf("error opening batch: %w", err))
@@ -303,7 +303,7 @@ func (p *ExportFileBlockProvider) GetHeader(h common.Hash, i uint64) *types.Head
 
 		defer tx.Rollback()
 
-		batch := membatchwithdb.NewMemoryBatch(tx, "")
+		batch := membatchwithdb.NewMemoryBatch(tx, "", log.Root())
 		defer batch.Rollback()
 		if err != nil {
 			panic(fmt.Errorf("error opening batch: %w", err))

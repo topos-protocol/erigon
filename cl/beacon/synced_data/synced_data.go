@@ -6,6 +6,7 @@ import (
 	"github.com/ledgerwatch/erigon/cl/clparams"
 	"github.com/ledgerwatch/erigon/cl/phase1/core/state"
 	"github.com/ledgerwatch/erigon/cl/utils"
+	"github.com/ledgerwatch/log/v3"
 )
 
 type SyncedDataManager struct {
@@ -31,9 +32,15 @@ func (s *SyncedDataManager) OnHeadState(newState *state.CachingBeaconState) (err
 	defer s.mu.Unlock()
 	if s.headState == nil {
 		s.headState, err = newState.Copy()
-		return err
+		if err != nil {
+			return err
+		}
 	}
 	err = newState.CopyInto(s.headState)
+	if err != nil {
+		log.Error("failed to copy head state", "err", err)
+	}
+
 	return
 }
 
@@ -52,7 +59,7 @@ func (s *SyncedDataManager) Syncing() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.headState == nil {
-		return false
+		return true
 	}
 
 	headEpoch := utils.GetCurrentEpoch(s.headState.GenesisTime(), s.cfg.SecondsPerSlot, s.cfg.SlotsPerEpoch)
