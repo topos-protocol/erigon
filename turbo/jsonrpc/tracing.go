@@ -138,9 +138,13 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 		}
 
 		stream.WriteObjectStart()
-		stream.WriteObjectField("txHash")
-		stream.WriteString(txnHash.Hex())
-		stream.WriteMore()
+
+		if config.Tracer != nil && *config.Tracer == "zeroTracer" {
+			stream.WriteObjectField("txHash")
+			stream.WriteString(txnHash.Hex())
+			stream.WriteMore()
+		}
+
 		stream.WriteObjectField("result")
 		select {
 		default:
