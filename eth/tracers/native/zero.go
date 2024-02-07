@@ -217,7 +217,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 
 		// We don't need to provide the actual bytecode UNLESS the opcode is the following:
 		// DELEGATECALL, CALL, STATICCALL, CALLCODE, EXTCODECOPY
-		if trace.CodeUsage.Read != nil && t.addrOpCodes[addr] != nil {
+		if trace.CodeUsage != nil && trace.CodeUsage.Read != nil && t.addrOpCodes[addr] != nil {
 			opCodes := []vm.OpCode{vm.DELEGATECALL, vm.CALL, vm.STATICCALL, vm.CALLCODE, vm.EXTCODECOPY}
 			keep := false
 			for _, opCode := range opCodes {
