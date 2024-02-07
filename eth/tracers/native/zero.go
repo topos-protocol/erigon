@@ -211,11 +211,22 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			trace.CodeUsage = nil
 		}
 
-		// We don't need to provide the actual bytecode if it is only used for EXTCODEHASH or EXTCODESIZE and nothing else
-		if t.addrOpCodes[addr] != nil {
-			delete(t.addrOpCodes[addr], vm.EXTCODEHASH)
-			delete(t.addrOpCodes[addr], vm.EXTCODESIZE)
-			if len(t.addrOpCodes[addr]) == 0 {
+		// if addr == libcommon.HexToAddress("0x093f6c270ac22ec240f0c6fd7414ea774ca8d3e5") {
+		// 	fmt.Printf("Address: %s, opcodes: %v\n", addr.String(), t.addrOpCodes[addr])
+		// }
+
+		// We don't need to provide the actual bytecode UNLESS the opcode is the following:
+		// DELEGATECALL, CALL, STATICCALL, CALLCODE, EXTCODECOPY
+		if trace.CodeUsage.Read != nil && t.addrOpCodes[addr] != nil {
+			opCodes := []vm.OpCode{vm.DELEGATECALL, vm.CALL, vm.STATICCALL, vm.CALLCODE, vm.EXTCODECOPY}
+			keep := false
+			for _, opCode := range opCodes {
+				if _, ok := t.addrOpCodes[addr][opCode]; ok {
+					keep = true
+					break
+				}
+			}
+			if !keep {
 				trace.CodeUsage = nil
 			}
 		}
