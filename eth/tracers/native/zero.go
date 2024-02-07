@@ -58,6 +58,10 @@ func (t *zeroTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to libcom
 	t.addAccountToTrace(to)
 	t.addAccountToTrace(env.Context.Coinbase)
 
+	if code != nil {
+		t.addOpCodeToAccount(to, vm.CALL)
+	}
+
 	// The recipient balance includes the value transferred.
 	toBal := new(big.Int).Sub(t.tx.Traces[to].Balance.ToBig(), value.ToBig())
 	t.tx.Traces[to].Balance = uint256.MustFromBig(toBal)
@@ -72,6 +76,12 @@ func (t *zeroTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to libcom
 	if t.tx.Traces[from].Nonce.Cmp(uint256.NewInt(0)) > 0 {
 		t.tx.Traces[from].Nonce.Sub(t.tx.Traces[from].Nonce, uint256.NewInt(1))
 	}
+}
+
+func (t *zeroTracer) CaptureEnter(op vm.OpCode, from libcommon.Address, to libcommon.Address, precompile bool, create bool, input []byte, gas uint64, value *uint256.Int, code []byte) {
+	t.addAccountToTrace(from)
+	t.addAccountToTrace(to)
+	t.addOpCodeToAccount(to, op)
 }
 
 func (t *zeroTracer) CaptureTxStart(gasLimit uint64) {
@@ -211,7 +221,7 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			trace.CodeUsage = nil
 		}
 
-		// if addr == libcommon.HexToAddress("0x093f6c270ac22ec240f0c6fd7414ea774ca8d3e5") {
+		// if addr == libcommon.HexToAddress("0xed12310d5a37326e6506209c4838146950166760") {
 		// 	fmt.Printf("Address: %s, opcodes: %v\n", addr.String(), t.addrOpCodes[addr])
 		// }
 
