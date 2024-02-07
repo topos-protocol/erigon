@@ -211,10 +211,11 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			trace.CodeUsage = nil
 		}
 
-		// We don't need to provide the actual bytecode if it is only used for EXTCODEHASH
-		if t.addrOpCodes[addr] != nil && len(t.addrOpCodes[addr]) == 1 {
-			_, ok := t.addrOpCodes[addr][vm.EXTCODEHASH]
-			if ok {
+		// We don't need to provide the actual bytecode if it is only used for EXTCODEHASH or EXTCODESIZE and nothing else
+		if t.addrOpCodes[addr] != nil {
+			delete(t.addrOpCodes[addr], vm.EXTCODEHASH)
+			delete(t.addrOpCodes[addr], vm.EXTCODESIZE)
+			if len(t.addrOpCodes[addr]) == 0 {
 				trace.CodeUsage = nil
 			}
 		}
