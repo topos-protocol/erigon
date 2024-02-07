@@ -27,15 +27,16 @@ func init() {
 }
 
 type zeroTracer struct {
-	noopTracer // stub struct to mock not used interface methods
-	env        *vm.EVM
-	tx         types.TxnInfo
-	gasLimit   uint64      // Amount of gas bought for the whole tx
-	interrupt  atomic.Bool // Atomic flag to signal execution interruption
-	reason     error       // Textual reason for the interruption
-	ctx        *tracers.Context
-	to         *libcommon.Address
-	txStatus   uint64
+	noopTracer  // stub struct to mock not used interface methods
+	env         *vm.EVM
+	tx          types.TxnInfo
+	gasLimit    uint64      // Amount of gas bought for the whole tx
+	interrupt   atomic.Bool // Atomic flag to signal execution interruption
+	reason      error       // Textual reason for the interruption
+	ctx         *tracers.Context
+	to          *libcommon.Address
+	txStatus    uint64
+	addrOpCodes map[libcommon.Address]map[vm.OpCode]struct{}
 }
 
 func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, error) {
@@ -43,7 +44,8 @@ func newZeroTracer(ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, e
 		tx: types.TxnInfo{
 			Traces: make(map[libcommon.Address]*types.TxnTrace),
 		},
-		ctx: ctx,
+		ctx:         ctx,
+		addrOpCodes: make(map[libcommon.Address]map[vm.OpCode]struct{}),
 	}, nil
 }
 
@@ -52,9 +54,9 @@ func (t *zeroTracer) CaptureStart(env *vm.EVM, from libcommon.Address, to libcom
 	t.to = &to
 	t.env = env
 
-	t.addAccountToTrace(from, false)
-	t.addAccountToTrace(to, false)
-	t.addAccountToTrace(env.Context.Coinbase, false)
+	t.addAccountToTrace(from)
+	t.addAccountToTrace(to)
+	t.addAccountToTrace(env.Context.Coinbase)
 
 	// The recipient balance includes the value transferred.
 	toBal := new(big.Int).Sub(t.tx.Traces[to].Balance.ToBig(), value.ToBig())
@@ -101,14 +103,17 @@ func (t *zeroTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, sco
 		t.addSSTOREToAccount(caller, slot, stackData[stackLen-2].Clone())
 	case stackLen >= 1 && (op == vm.EXTCODECOPY || op == vm.EXTCODEHASH || op == vm.EXTCODESIZE || op == vm.BALANCE || op == vm.SELFDESTRUCT):
 		addr := libcommon.Address(stackData[stackLen-1].Bytes20())
-		t.addAccountToTrace(addr, false)
+		t.addAccountToTrace(addr)
+		t.addOpCodeToAccount(addr, op)
 	case stackLen >= 5 && (op == vm.DELEGATECALL || op == vm.CALL || op == vm.STATICCALL || op == vm.CALLCODE):
 		addr := libcommon.Address(stackData[stackLen-2].Bytes20())
-		t.addAccountToTrace(addr, false)
+		t.addAccountToTrace(addr)
+		t.addOpCodeToAccount(addr, op)
 	case op == vm.CREATE:
 		nonce := t.env.IntraBlockState().GetNonce(caller)
 		addr := crypto.CreateAddress(caller, nonce)
-		t.addAccountToTrace(addr, true)
+		t.addAccountToTrace(addr)
+		t.addOpCodeToAccount(addr, op)
 	case stackLen >= 4 && op == vm.CREATE2:
 		offset := stackData[stackLen-2]
 		size := stackData[stackLen-3]
@@ -120,7 +125,8 @@ func (t *zeroTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, sco
 		inithash := crypto.Keccak256(init)
 		salt := stackData[stackLen-4]
 		addr := crypto.CreateAddress2(caller, salt.Bytes32(), inithash)
-		t.addAccountToTrace(addr, true)
+		t.addAccountToTrace(addr)
+		t.addOpCodeToAccount(addr, op)
 	}
 }
 
@@ -205,6 +211,14 @@ func (t *zeroTracer) CaptureTxEnd(restGas uint64) {
 			trace.CodeUsage = nil
 		}
 
+		// We don't need to provide the actual bytecode if it is only used for EXTCODEHASH
+		if t.addrOpCodes[addr] != nil && len(t.addrOpCodes[addr]) == 1 {
+			_, ok := t.addrOpCodes[addr][vm.EXTCODEHASH]
+			if ok {
+				trace.CodeUsage = nil
+			}
+		}
+
 		if hasSelfDestructed {
 			trace.SelfDestructed = new(bool)
 			*trace.SelfDestructed = true
@@ -280,7 +294,7 @@ func (t *zeroTracer) Stop(err error) {
 	t.interrupt.Store(true)
 }
 
-func (t *zeroTracer) addAccountToTrace(addr libcommon.Address, created bool) {
+func (t *zeroTracer) addAccountToTrace(addr libcommon.Address) {
 	if _, ok := t.tx.Traces[addr]; ok {
 		return
 	}
@@ -302,8 +316,18 @@ func (t *zeroTracer) addSLOADToAccount(addr libcommon.Address, key libcommon.Has
 	var value uint256.Int
 	t.env.IntraBlockState().GetState(addr, &key, &value)
 	t.tx.Traces[addr].StorageReadMap[key] = struct{}{}
+
+	t.addOpCodeToAccount(addr, vm.SLOAD)
 }
 
 func (t *zeroTracer) addSSTOREToAccount(addr libcommon.Address, key libcommon.Hash, value *uint256.Int) {
 	t.tx.Traces[addr].StorageWritten[key] = value
+	t.addOpCodeToAccount(addr, vm.SSTORE)
+}
+
+func (t *zeroTracer) addOpCodeToAccount(addr libcommon.Address, op vm.OpCode) {
+	if t.addrOpCodes[addr] == nil {
+		t.addrOpCodes[addr] = make(map[vm.OpCode]struct{})
+	}
+	t.addrOpCodes[addr][op] = struct{}{}
 }
