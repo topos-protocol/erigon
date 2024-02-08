@@ -1175,9 +1175,15 @@ func (tds *TrieDbState) ReadAccountCodeSize(address common.Address, incarnation 
 		}
 	}
 	if tds.resolveReads {
+		// We will need to read the code explicitly to make sure code is in the witness
+		_, err = tds.ReadAccountCode(address, incarnation, codeHash)
+		if err != nil {
+			return 0, err
+		}
+
 		addrHash, err1 := common.HashData(address[:])
 		if err1 != nil {
-			return 0, err
+			return 0, err1
 		}
 		tds.currentBuffer.accountReads[addrHash] = struct{}{}
 		// we have to be careful, because the code might change
