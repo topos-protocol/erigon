@@ -142,10 +142,11 @@ func (c *core) startNewRound(round *big.Int) {
 		logger.Debug("QBFT: start at the initial round")
 	} else if lastProposal.Number().Cmp(c.current.Sequence()) >= 0 {
 		diff := new(big.Int).Sub(lastProposal.Number(), c.current.Sequence())
-		sequenceMeter.Mark(new(big.Int).Add(diff, libcommon.Big1).Int64())
+		sequenceMeter.AddUint64(new(big.Int).Add(diff, libcommon.Big1).Uint64())
 
 		if !c.consensusTimestamp.IsZero() {
-			consensusTimer.UpdateSince(c.consensusTimestamp)
+			//consensusTimer.UpdateSince(c.consensusTimestamp)
+			consensusTimer.PutSince()
 			c.consensusTimestamp = time.Time{}
 		}
 		logger.Debug("QBFT: catch up last block proposal")
@@ -194,7 +195,8 @@ func (c *core) startNewRound(round *big.Int) {
 	c.setState(StateAcceptRequest)
 
 	if c.current != nil && round.Cmp(c.current.Round()) > 0 {
-		roundMeter.Mark(new(big.Int).Sub(round, c.current.Round()).Int64())
+		//roundMeter.Mark(new(big.Int).Sub(round, c.current.Round()).Int64())
+		roundMeter.AddUint64(new(big.Int).Sub(round, c.current.Round()).Uint64())
 	}
 
 	// Update RoundChangeSet by deleting older round messages

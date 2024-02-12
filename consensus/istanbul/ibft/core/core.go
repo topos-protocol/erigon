@@ -25,7 +25,6 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	metrics "github.com/ledgerwatch/erigon-lib/metrics"
-	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -200,10 +199,12 @@ func (c *core) startNewRound(round *big.Int) {
 		logger.Trace("Start to the initial round")
 	} else if lastProposal.Number().Cmp(c.current.Sequence()) >= 0 {
 		diff := new(big.Int).Sub(lastProposal.Number(), c.current.Sequence())
-		sequenceMeter.Mark(new(big.Int).Add(diff, libcommon.Big1).Int64())
+		// sequenceMeter.Mark(new(big.Int).Add(diff, libcommon.Big1).Int64())
+		sequenceMeter.AddUint64(new(big.Int).Add(diff, libcommon.Big1).Uint64())
 
 		if !c.consensusTimestamp.IsZero() {
-			consensusTimer.UpdateSince(c.consensusTimestamp)
+			// consensusTimer.UpdateSince(c.consensusTimestamp)
+			consensusTimer.PutSince()
 			c.consensusTimestamp = time.Time{}
 		}
 		logger.Trace("Catch up latest proposal", "number", lastProposal.Number().Uint64(), "hash", lastProposal.Hash())
@@ -229,7 +230,7 @@ func (c *core) startNewRound(round *big.Int) {
 		}
 	} else {
 		newView = &istanbul.View{
-			Sequence: new(big.Int).Add(lastProposal.Number(), common.Big1),
+			Sequence: new(big.Int).Add(lastProposal.Number(), libcommon.Big1),
 			Round:    new(big.Int),
 		}
 		c.valSet = c.backend.Validators(lastProposal)
@@ -276,7 +277,8 @@ func (c *core) catchUpRound(view *istanbul.View) {
 	logger := c.logger.New("old_round", c.current.Round(), "old_seq", c.current.Sequence(), "old_proposer", c.valSet.GetProposer())
 
 	if view.Round.Cmp(c.current.Round()) > 0 {
-		roundMeter.Mark(new(big.Int).Sub(view.Round, c.current.Round()).Int64())
+		// roundMeter.Mark(new(big.Int).Sub(view.Round, c.current.Round()).Int64())
+		roundMeter.AddUint64(new(big.Int).Sub(view.Round, c.current.Round()).Uint64())
 	}
 	c.waitingForRoundChange = true
 
