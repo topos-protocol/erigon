@@ -5,7 +5,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
@@ -308,7 +307,8 @@ func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 // consensus rules that happen at finalization (e.g. block rewards).
 func (e *Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header) {
 	// No block rewards in Istanbul, so the state remains as is and uncles are dropped
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	// TODO Check if we need to update the state
+	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = nilUncleHash
 }
 
@@ -316,11 +316,13 @@ func (e *Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 // nor block rewards given, and returns the final block.
 func (e *Engine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	/// No block rewards in Istanbul, so the state remains as is and uncles are dropped
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	// TODO Check if we need to update the state
+	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = nilUncleHash
 
 	// Assemble and return the final block for sealing
-	return types.NewBlock(header, txs, nil, receipts, new(trie.Trie)), nil
+	// return types.NewBlock(header, txs, nil, receipts, new(trie.Trie)), nil
+	return types.NewBlock(header, *txs, nil, receipts, nil /*withdrawals*/), nil
 }
 
 // Seal generates a new block for the given input block with the local miner's

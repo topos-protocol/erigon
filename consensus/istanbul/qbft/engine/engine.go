@@ -84,7 +84,7 @@ func writeRoundNumber(round *big.Int) ApplyQBFTExtra {
 
 func (e *Engine) VerifyBlockProposal(chain consensus.ChainHeaderReader, block *types.Block, validators istanbul.ValidatorSet) (time.Duration, error) {
 	// check block body
-	txnHash := types.DeriveSha(block.Transactions(), new(trie.Trie))
+	txnHash := types.DeriveSha(block.Transactions())
 	if txnHash != block.Header().TxHash {
 		return 0, istanbulcommon.ErrMismatchTxhashes
 	}
