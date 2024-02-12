@@ -19,7 +19,7 @@ package core
 import (
 	"time"
 
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	"github.com/ledgerwatch/erigon/consensus"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/rlp"
@@ -86,7 +86,7 @@ func (c *core) sendPreprepareMsg(request *Request) {
 
 		logger = withMsg(logger, preprepare).New("block.number", preprepare.Proposal.Number().Uint64(), "block.hash", preprepare.Proposal.Hash().String())
 
-		logger.Info("QBFT: broadcast PRE-PREPARE message", "payload", hexutil.Encode(payload))
+		logger.Info("QBFT: broadcast PRE-PREPARE message", "payload", hexutility.Encode(payload))
 
 		// Broadcast RLP-encoded message
 		if err = c.backend.Broadcast(c.valSet, preprepare.Code(), payload); err != nil {

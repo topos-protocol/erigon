@@ -20,7 +20,7 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
@@ -29,7 +29,7 @@ import (
 // sendNextRoundChange sends the ROUND CHANGE message with current round + 1
 func (c *core) sendNextRoundChange() {
 	cv := c.currentView()
-	c.sendRoundChange(new(big.Int).Add(cv.Round, common.Big1))
+	c.sendRoundChange(new(big.Int).Add(cv.Round, libcommon.Big1))
 }
 
 // sendRoundChange sends the ROUND CHANGE message with the given round
@@ -52,7 +52,7 @@ func (c *core) sendRoundChange(round *big.Int) {
 	cv = c.currentView()
 	rc := &istanbul.Subject{
 		View:   cv,
-		Digest: common.Hash{},
+		Digest: libcommon.Hash{},
 	}
 
 	payload, err := ibfttypes.Encode(rc)

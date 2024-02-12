@@ -17,7 +17,7 @@
 package core
 
 import (
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/rlp"
@@ -70,7 +70,7 @@ func (c *core) broadcastCommit() {
 		return
 	}
 
-	withMsg(logger, commit).Info("QBFT: broadcast COMMIT message", "payload", hexutil.Encode(payload))
+	withMsg(logger, commit).Info("QBFT: broadcast COMMIT message", "payload", hexutility.Encode(payload))
 
 	// Broadcast RLP-encoded message
 	if err = c.backend.Broadcast(c.valSet, commit.Code(), payload); err != nil {

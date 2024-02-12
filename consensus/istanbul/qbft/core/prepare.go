@@ -17,7 +17,7 @@
 package core
 
 import (
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
+	"github.com/ledgerwatch/erigon-lib/common/hexutility"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/rlp"
 )
@@ -55,7 +55,7 @@ func (c *core) broadcastPrepare() {
 		return
 	}
 
-	withMsg(logger, prepare).Info("QBFT: broadcast PREPARE message", "payload", hexutil.Encode(payload))
+	withMsg(logger, prepare).Info("QBFT: broadcast PREPARE message", "payload", hexutility.Encode(payload))
 
 	// Broadcast RLP-encoded message
 	if err = c.backend.Broadcast(c.valSet, prepare.Code(), payload); err != nil {
