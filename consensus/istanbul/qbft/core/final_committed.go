@@ -16,14 +16,16 @@
 
 package core
 
-import "github.com/ledgerwatch/erigon/common"
+import (
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+)
 
 func (c *core) handleFinalCommitted() error {
 	c.currentLogger(true, nil).Info("QBFT: handle final committed")
 
 	// Stopping the timer, so that round changes do not happen
 	c.stopTimer()
-	c.startNewRound(common.Big0)
+	c.startNewRound(libcommon.Big0)
 
 	return nil
 }

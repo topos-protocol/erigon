@@ -23,7 +23,7 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
@@ -62,7 +62,7 @@ func New(config *istanbul.Config, privateKey *ecdsa.PrivateKey, db ethdb.Databas
 		db:               db,
 		commitCh:         make(chan *types.Block, 1),
 		recents:          recents,
-		candidates:       make(map[common.Address]bool),
+		candidates:       make(map[libcommon.Address]bool),
 		coreStarted:      false,
 		recentMessages:   recentMessages,
 		knownMessages:    knownMessages,
@@ -80,7 +80,7 @@ type Backend struct {
 	config *istanbul.Config
 
 	privateKey *ecdsa.PrivateKey
-	address    common.Address
+	address    libcommon.Address
 
 	core istanbul.Core
 
@@ -95,17 +95,17 @@ type Backend struct {
 
 	chain        consensus.ChainHeaderReader
 	currentBlock func() *types.Block
-	hasBadBlock  func(db ethdb.Reader, hash common.Hash) bool
+	hasBadBlock  func(db ethdb.Reader, hash libcommon.Hash) bool
 
 	// the channels for istanbul engine notifications
 	commitCh          chan *types.Block
-	proposedBlockHash common.Hash
+	proposedBlockHash libcommon.Hash
 	sealMu            sync.Mutex
 	coreStarted       bool
 	coreMu            sync.RWMutex
 
 	// Current list of candidates we are pushing
-	candidates map[common.Address]bool
+	candidates map[libcommon.Address]bool
 	// Protects the signer fields
 	candidatesLock sync.RWMutex
 	// Snapshots for recent block to speed up reorgs
@@ -141,7 +141,7 @@ func (sb *Backend) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64
 }
 
 // Address implements istanbul.Backend.Address
-func (sb *Backend) Address() common.Address {
+func (sb *Backend) Address() libcommon.Address {
 	return sb.Engine().Address()
 }
 
@@ -168,7 +168,7 @@ func (sb *Backend) Gossip(valSet istanbul.ValidatorSet, code uint64, payload []b
 	hash := istanbul.RLPHash(payload)
 	sb.knownMessages.Add(hash, true)
 
-	targets := make(map[common.Address]bool)
+	targets := make(map[libcommon.Address]bool)
 	for _, val := range valSet.List() {
 		if val.Address() != sb.Address() {
 			targets[val.Address()] = true
@@ -290,7 +290,7 @@ func (sb *Backend) SignWithoutHashing(data []byte) ([]byte, error) {
 }
 
 // CheckSignature implements istanbul.Backend.CheckSignature
-func (sb *Backend) CheckSignature(data []byte, address common.Address, sig []byte) error {
+func (sb *Backend) CheckSignature(data []byte, address libcommon.Address, sig []byte) error {
 	signer, err := istanbul.GetSignatureAddress(data, sig)
 	if err != nil {
 		return err
@@ -304,17 +304,17 @@ func (sb *Backend) CheckSignature(data []byte, address common.Address, sig []byt
 }
 
 // HasPropsal implements istanbul.Backend.HashBlock
-func (sb *Backend) HasPropsal(hash common.Hash, number *big.Int) bool {
+func (sb *Backend) HasPropsal(hash libcommon.Hash, number *big.Int) bool {
 	return sb.chain.GetHeader(hash, number.Uint64()) != nil
 }
 
 // GetProposer implements istanbul.Backend.GetProposer
-func (sb *Backend) GetProposer(number uint64) common.Address {
+func (sb *Backend) GetProposer(number uint64) libcommon.Address {
 	if h := sb.chain.GetHeaderByNumber(number); h != nil {
 		a, _ := sb.Author(h)
 		return a
 	}
-	return common.Address{}
+	return libcommon.Address{}
 }
 
 // ParentValidators implements istanbul.Backend.GetParentValidators
@@ -325,7 +325,7 @@ func (sb *Backend) ParentValidators(proposal istanbul.Proposal) istanbul.Validat
 	return validator.NewSet(nil, sb.config.ProposerPolicy)
 }
 
-func (sb *Backend) getValidators(number uint64, hash common.Hash) istanbul.ValidatorSet {
+func (sb *Backend) getValidators(number uint64, hash libcommon.Hash) istanbul.ValidatorSet {
 	snap, err := sb.snapshot(sb.chain, number, hash, nil)
 	if err != nil {
 		return validator.NewSet(nil, sb.config.ProposerPolicy)
@@ -333,16 +333,16 @@ func (sb *Backend) getValidators(number uint64, hash common.Hash) istanbul.Valid
 	return snap.ValSet
 }
 
-func (sb *Backend) LastProposal() (istanbul.Proposal, common.Address) {
+func (sb *Backend) LastProposal() (istanbul.Proposal, libcommon.Address) {
 	block := sb.currentBlock()
 
-	var proposer common.Address
-	if block.Number().Cmp(common.Big0) > 0 {
+	var proposer libcommon.Address
+	if block.Number().Cmp(libcommon.Big0) > 0 {
 		var err error
 		proposer, err = sb.Author(block.Header())
 		if err != nil {
 			sb.logger.Error("BFT: last block proposal invalid", "err", err)
-			return nil, common.Address{}
+			return nil, libcommon.Address{}
 		}
 	}
 
@@ -350,7 +350,7 @@ func (sb *Backend) LastProposal() (istanbul.Proposal, common.Address) {
 	return block, proposer
 }
 
-func (sb *Backend) HasBadProposal(hash common.Hash) bool {
+func (sb *Backend) HasBadProposal(hash libcommon.Hash) bool {
 	if sb.hasBadBlock == nil {
 		return false
 	}

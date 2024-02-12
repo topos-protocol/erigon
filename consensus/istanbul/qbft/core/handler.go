@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/rlp"
@@ -37,7 +37,7 @@ func (c *core) Start() error {
 	go c.handleEvents()
 
 	// Start a new round from last sequence + 1
-	c.startNewRound(common.Big0)
+	c.startNewRound(libcommon.Big0)
 
 	return nil
 }
@@ -226,7 +226,7 @@ func (c *core) handleTimeoutMsg() {
 	logger := c.currentLogger(true, nil)
 	// Start the new round
 	round := c.current.Round()
-	nextRound := new(big.Int).Add(round, common.Big1)
+	nextRound := new(big.Int).Add(round, libcommon.Big1)
 
 	logger.Warn("QBFT: TIMER CHANGING ROUND", "pr", c.current.preparedRound)
 	c.startNewRound(nextRound)

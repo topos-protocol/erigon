@@ -4,7 +4,7 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/log/v3"
@@ -56,7 +56,7 @@ func hasQuorumOfRoundChangeMessagesForNil(roundChangeMessages []*qbfttypes.Signe
 	nilCount := 0
 	for _, m := range roundChangeMessages {
 		log.Trace("QBFT: hasQuorumOfRoundChangeMessagesForNil", "rc", m)
-		if (m.PreparedRound == nil || m.PreparedRound.Cmp(common.Big0) == 0) && common.EmptyHash(m.PreparedDigest) {
+		if (m.PreparedRound == nil || m.PreparedRound.Cmp(libcommon.Big0) == 0) && (m.PreparedDigest == libcommon.Hash{}) {
 			nilCount++
 			if nilCount == quorumSize {
 				return nil

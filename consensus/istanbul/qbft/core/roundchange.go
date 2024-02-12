@@ -22,8 +22,9 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/ledgerwatch/erigon-lib/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
-	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -34,7 +35,7 @@ import (
 // broadcastNextRoundChange sends the ROUND CHANGE message with current round + 1
 func (c *core) broadcastNextRoundChange() {
 	cv := c.currentView()
-	c.broadcastRoundChange(new(big.Int).Add(cv.Round, common.Big1))
+	c.broadcastRoundChange(new(big.Int).Add(cv.Round, libcommon.Big1))
 }
 
 // broadcastRoundChange is called when either

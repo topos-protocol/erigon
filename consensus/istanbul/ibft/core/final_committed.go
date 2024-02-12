@@ -19,7 +19,7 @@ package core
 import (
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 )
 
 func (c *core) handleFinalCommitted() error {
@@ -30,9 +30,9 @@ func (c *core) handleFinalCommitted() error {
 	// This is required so that the stop() on core can successfully unsubscribe from events
 	nextSeq := new(big.Int).Add(c.currentView().Sequence, big.NewInt(1))
 	if c.backend.IsQBFTConsensusAt(nextSeq) {
-		go c.startNewRound(common.Big0)
+		go c.startNewRound(libcommon.Big0)
 	} else {
-		c.startNewRound(common.Big0)
+		c.startNewRound(libcommon.Big0)
 	}
 	return nil
 }

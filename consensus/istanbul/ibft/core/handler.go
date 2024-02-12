@@ -17,7 +17,7 @@
 package core
 
 import (
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
@@ -32,7 +32,7 @@ func (c *core) Start() error {
 	go c.handleEvents()
 
 	// Start a new round from last sequence + 1
-	c.startNewRound(common.Big0)
+	c.startNewRound(libcommon.Big0)
 
 	return nil
 }
@@ -202,7 +202,7 @@ func (c *core) handleTimeoutMsg() {
 	lastProposal, _ := c.backend.LastProposal()
 	if lastProposal != nil && lastProposal.Number().Cmp(c.current.Sequence()) >= 0 {
 		c.logger.Trace("round change timeout, catch up latest sequence", "number", lastProposal.Number().Uint64())
-		c.startNewRound(common.Big0)
+		c.startNewRound(libcommon.Big0)
 	} else {
 		c.sendNextRoundChange()
 	}

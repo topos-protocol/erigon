@@ -19,7 +19,7 @@ package core
 import (
 	"reflect"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
@@ -30,7 +30,7 @@ func (c *core) sendCommit() {
 	c.broadcastCommit(sub)
 }
 
-func (c *core) sendCommitForOldBlock(view *istanbul.View, digest common.Hash) {
+func (c *core) sendCommitForOldBlock(view *istanbul.View, digest libcommon.Hash) {
 	sub := &istanbul.Subject{
 		View:   view,
 		Digest: digest,
