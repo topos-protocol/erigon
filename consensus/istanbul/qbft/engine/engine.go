@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon-lib/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
@@ -29,11 +30,11 @@ type SignerFn func(data []byte) ([]byte, error)
 type Engine struct {
 	cfg *istanbul.Config
 
-	signer common.Address // Ethereum address of the signing key
-	sign   SignerFn       // Signer function to authorize hashes with
+	signer libcommon.Address // Ethereum address of the signing key
+	sign   SignerFn          // Signer function to authorize hashes with
 }
 
-func NewEngine(cfg *istanbul.Config, signer common.Address, sign SignerFn) *Engine {
+func NewEngine(cfg *istanbul.Config, signer libcommon.Address, sign SignerFn) *Engine {
 	return &Engine{
 		cfg:    cfg,
 		signer: signer,
@@ -41,7 +42,7 @@ func NewEngine(cfg *istanbul.Config, signer common.Address, sign SignerFn) *Engi
 	}
 }
 
-func (e *Engine) Author(header *types.Header) (common.Address, error) {
+func (e *Engine) Author(header *types.Header) (libcommon.Address, error) {
 	return header.Coinbase, nil
 }
 
@@ -314,7 +315,7 @@ func (e *Engine) VerifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 }
 
 func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header, validators istanbul.ValidatorSet) error {
-	header.Coinbase = common.Address{}
+	header.Coinbase = libcommon.Address{}
 	header.Nonce = istanbulcommon.EmptyBlockNonce
 	header.MixDigest = types.IstanbulDigest
 
@@ -337,10 +338,10 @@ func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 
 	currentBlockNumber := big.NewInt(0).SetUint64(number - 1)
 	validatorContract := e.cfg.GetValidatorContractAddress(currentBlockNumber)
-	if validatorContract != (common.Address{}) && e.cfg.GetValidatorSelectionMode(currentBlockNumber) == params.ContractMode {
+	if validatorContract != (libcommon.Address{}) && e.cfg.GetValidatorSelectionMode(currentBlockNumber) == params.ContractMode {
 		return ApplyHeaderQBFTExtra(
 			header,
-			WriteValidators([]common.Address{}),
+			WriteValidators([]libcommon.Address{}),
 		)
 	} else {
 		for _, transition := range e.cfg.Transitions {
@@ -366,7 +367,7 @@ func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	}
 }
 
-func WriteValidators(validators []common.Address) ApplyQBFTExtra {
+func WriteValidators(validators []libcommon.Address) ApplyQBFTExtra {
 	return func(qbftExtra *types.QBFTExtra) error {
 		qbftExtra.Validators = validators
 		return nil
@@ -421,7 +422,7 @@ func (e *Engine) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, 
 	return new(big.Int)
 }
 
-func (e *Engine) ExtractGenesisValidators(header *types.Header) ([]common.Address, error) {
+func (e *Engine) ExtractGenesisValidators(header *types.Header) ([]libcommon.Address, error) {
 	extra, err := types.ExtractQBFTExtra(header)
 	if err != nil {
 		return nil, err
@@ -430,15 +431,15 @@ func (e *Engine) ExtractGenesisValidators(header *types.Header) ([]common.Addres
 	return extra.Validators, nil
 }
 
-func (e *Engine) Signers(header *types.Header) ([]common.Address, error) {
+func (e *Engine) Signers(header *types.Header) ([]libcommon.Address, error) {
 	extra, err := types.ExtractQBFTExtra(header)
 	if err != nil {
-		return []common.Address{}, err
+		return []libcommon.Address{}, err
 	}
 	committedSeal := extra.CommittedSeal
 	proposalSeal := PrepareCommittedSeal(header, extra.Round)
 
-	var addrs []common.Address
+	var addrs []libcommon.Address
 	// 1. Get committed seals from current header
 	for _, seal := range committedSeal {
 		// 2. Get the original address by seal and parent block hash
@@ -452,7 +453,7 @@ func (e *Engine) Signers(header *types.Header) ([]common.Address, error) {
 	return addrs, nil
 }
 
-func (e *Engine) Address() common.Address {
+func (e *Engine) Address() libcommon.Address {
 	return e.signer
 }
 
@@ -477,14 +478,14 @@ func PrepareCommittedSeal(header *types.Header, round uint32) []byte {
 	return h.QBFTHashWithRoundNumber(round).Bytes()
 }
 
-func (e *Engine) WriteVote(header *types.Header, candidate common.Address, authorize bool) error {
+func (e *Engine) WriteVote(header *types.Header, candidate libcommon.Address, authorize bool) error {
 	return ApplyHeaderQBFTExtra(
 		header,
 		WriteVote(candidate, authorize),
 	)
 }
 
-func WriteVote(candidate common.Address, authorize bool) ApplyQBFTExtra {
+func WriteVote(candidate libcommon.Address, authorize bool) ApplyQBFTExtra {
 	return func(qbftExtra *types.QBFTExtra) error {
 		voteType := types.QBFTDropVote
 		if authorize {
@@ -497,15 +498,15 @@ func WriteVote(candidate common.Address, authorize bool) ApplyQBFTExtra {
 	}
 }
 
-func (e *Engine) ReadVote(header *types.Header) (candidate common.Address, authorize bool, err error) {
+func (e *Engine) ReadVote(header *types.Header) (candidate libcommon.Address, authorize bool, err error) {
 	qbftExtra, err := getExtra(header)
 	if err != nil {
-		return common.Address{}, false, err
+		return libcommon.Address{}, false, err
 	}
 
 	var vote *types.ValidatorVote
 	if qbftExtra.Vote == nil {
-		vote = &types.ValidatorVote{RecipientAddress: common.Address{}, VoteType: types.QBFTDropVote}
+		vote = &types.ValidatorVote{RecipientAddress: libcommon.Address{}, VoteType: types.QBFTDropVote}
 	} else {
 		vote = qbftExtra.Vote
 	}
@@ -517,7 +518,7 @@ func (e *Engine) ReadVote(header *types.Header) (candidate common.Address, autho
 	case vote.VoteType == types.QBFTDropVote:
 		authorize = false
 	default:
-		return common.Address{}, false, istanbulcommon.ErrInvalidVote
+		return libcommon.Address{}, false, istanbulcommon.ErrInvalidVote
 	}
 
 	return vote.RecipientAddress, authorize, nil
@@ -529,7 +530,7 @@ func getExtra(header *types.Header) (*types.QBFTExtra, error) {
 		vanity := append(header.Extra, bytes.Repeat([]byte{0x00}, types.IstanbulExtraVanity-len(header.Extra))...)
 		return &types.QBFTExtra{
 			VanityData:    vanity,
-			Validators:    []common.Address{},
+			Validators:    []libcommon.Address{},
 			CommittedSeal: [][]byte{},
 			Round:         0,
 			Vote:          nil,
@@ -555,7 +556,7 @@ func (e *Engine) accumulateRewards(chain consensus.ChainHeaderReader, state *sta
 	blockReward := chain.Config().GetBlockReward(header.Number)
 	if blockReward.Cmp(big.NewInt(0)) > 0 {
 		coinbase := header.Coinbase
-		if (coinbase == common.Address{}) {
+		if (coinbase == libcommon.Address{}) {
 			coinbase = e.signer
 		}
 		rewardAccount, _ := chain.Config().GetRewardAccount(header.Number, coinbase)

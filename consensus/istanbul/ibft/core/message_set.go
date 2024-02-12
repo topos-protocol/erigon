@@ -22,7 +22,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
 )
@@ -35,7 +35,7 @@ func newMessageSet(valSet istanbul.ValidatorSet) *messageSet {
 			Sequence: new(big.Int),
 		},
 		messagesMu: new(sync.Mutex),
-		messages:   make(map[common.Address]*ibfttypes.Message),
+		messages:   make(map[libcommon.Address]*ibfttypes.Message),
 		valSet:     valSet,
 	}
 }
@@ -46,7 +46,7 @@ type messageSet struct {
 	view       *istanbul.View
 	valSet     istanbul.ValidatorSet
 	messagesMu *sync.Mutex
-	messages   map[common.Address]*ibfttypes.Message
+	messages   map[libcommon.Address]*ibfttypes.Message
 }
 
 func (ms *messageSet) View() *istanbul.View {
@@ -81,7 +81,7 @@ func (ms *messageSet) Size() int {
 	return len(ms.messages)
 }
 
-func (ms *messageSet) Get(addr common.Address) *ibfttypes.Message {
+func (ms *messageSet) Get(addr libcommon.Address) *ibfttypes.Message {
 	ms.messagesMu.Lock()
 	defer ms.messagesMu.Unlock()
 	return ms.messages[addr]

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	metrics "github.com/ledgerwatch/erigon-lib/metrics"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
@@ -34,9 +35,9 @@ import (
 )
 
 var (
-	roundMeter     = metrics.NewRegisteredMeter("consensus/istanbul/core/round", nil)
-	sequenceMeter  = metrics.NewRegisteredMeter("consensus/istanbul/core/sequence", nil)
-	consensusTimer = metrics.NewRegisteredTimer("consensus/istanbul/core/consensus", nil)
+	roundMeter     = metrics.NewCounter("consensus/istanbul/core/round")
+	sequenceMeter  = metrics.NewCounter("consensus/istanbul/core/sequence")
+	consensusTimer = metrics.NewHistTimer("consensus/istanbul/core/consensus")
 )
 
 // New creates an Istanbul consensus core
@@ -48,7 +49,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) *core {
 		handlerWg:          new(sync.WaitGroup),
 		logger:             log.New("address", backend.Address()),
 		backend:            backend,
-		backlogs:           make(map[common.Address]*prque.Prque),
+		backlogs:           make(map[libcommon.Address]*prque.Prque),
 		backlogsMu:         new(sync.Mutex),
 		pendingRequests:    prque.New(),
 		pendingRequestsMu:  new(sync.Mutex),
@@ -63,7 +64,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) *core {
 
 type core struct {
 	config  *istanbul.Config
-	address common.Address
+	address libcommon.Address
 	state   ibfttypes.State
 	logger  log.Logger
 
@@ -75,9 +76,9 @@ type core struct {
 
 	valSet                istanbul.ValidatorSet
 	waitingForRoundChange bool
-	validateFn            func([]byte, []byte) (common.Address, error)
+	validateFn            func([]byte, []byte) (libcommon.Address, error)
 
-	backlogs   map[common.Address]*prque.Prque
+	backlogs   map[libcommon.Address]*prque.Prque
 	backlogsMu *sync.Mutex
 
 	current   *roundState
@@ -158,7 +159,7 @@ func (c *core) IsProposer() bool {
 	return v.IsProposer(c.backend.Address())
 }
 
-func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
+func (c *core) IsCurrentProposal(blockHash libcommon.Hash) bool {
 	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.Hash() == blockHash
 }
 
@@ -199,7 +200,7 @@ func (c *core) startNewRound(round *big.Int) {
 		logger.Trace("Start to the initial round")
 	} else if lastProposal.Number().Cmp(c.current.Sequence()) >= 0 {
 		diff := new(big.Int).Sub(lastProposal.Number(), c.current.Sequence())
-		sequenceMeter.Mark(new(big.Int).Add(diff, common.Big1).Int64())
+		sequenceMeter.Mark(new(big.Int).Add(diff, libcommon.Big1).Int64())
 
 		if !c.consensusTimestamp.IsZero() {
 			consensusTimer.UpdateSince(c.consensusTimestamp)
@@ -207,7 +208,7 @@ func (c *core) startNewRound(round *big.Int) {
 		}
 		logger.Trace("Catch up latest proposal", "number", lastProposal.Number().Uint64(), "hash", lastProposal.Hash())
 	} else if lastProposal.Number().Cmp(big.NewInt(c.current.Sequence().Int64()-1)) == 0 {
-		if round.Cmp(common.Big0) == 0 {
+		if round.Cmp(libcommon.Big0) == 0 {
 			// same seq and round, don't need to start new round
 			return
 		} else if round.Cmp(c.current.Round()) < 0 {
@@ -294,10 +295,10 @@ func (c *core) updateRoundState(view *istanbul.View, validatorSet istanbul.Valid
 		if c.current.IsHashLocked() {
 			c.current = newRoundState(view, validatorSet, c.current.GetLockedHash(), c.current.Preprepare, c.current.pendingRequest, c.backend.HasBadProposal)
 		} else {
-			c.current = newRoundState(view, validatorSet, common.Hash{}, nil, c.current.pendingRequest, c.backend.HasBadProposal)
+			c.current = newRoundState(view, validatorSet, libcommon.Hash{}, nil, c.current.pendingRequest, c.backend.HasBadProposal)
 		}
 	} else {
-		c.current = newRoundState(view, validatorSet, common.Hash{}, nil, nil, c.backend.HasBadProposal)
+		c.current = newRoundState(view, validatorSet, libcommon.Hash{}, nil, nil, c.backend.HasBadProposal)
 	}
 }
 
@@ -311,7 +312,7 @@ func (c *core) setState(state ibfttypes.State) {
 	c.processBacklog()
 }
 
-func (c *core) Address() common.Address {
+func (c *core) Address() libcommon.Address {
 	return c.address
 }
 
@@ -342,7 +343,7 @@ func (c *core) newRoundChangeTimer() {
 	})
 }
 
-func (c *core) checkValidatorSignature(data []byte, sig []byte) (common.Address, error) {
+func (c *core) checkValidatorSignature(data []byte, sig []byte) (libcommon.Address, error) {
 	return istanbul.CheckValidatorSignature(c.valSet, data, sig)
 }
 
@@ -356,7 +357,7 @@ func (c *core) QuorumSize() int {
 }
 
 // PrepareCommittedSeal returns a committed seal for the given hash
-func PrepareCommittedSeal(hash common.Hash) []byte {
+func PrepareCommittedSeal(hash libcommon.Hash) []byte {
 	var buf bytes.Buffer
 	buf.Write(hash.Bytes())
 	buf.Write([]byte{byte(ibfttypes.MsgCommit)})

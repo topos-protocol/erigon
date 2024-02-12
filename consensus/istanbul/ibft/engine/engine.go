@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ledgerwatch/erigon-lib/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
-	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
@@ -31,11 +32,11 @@ type SignerFn func(data []byte) ([]byte, error)
 type Engine struct {
 	cfg *istanbul.Config
 
-	signer common.Address // Ethereum address of the signing key
-	sign   SignerFn       // Signer function to authorize hashes with
+	signer libcommon.Address // Ethereum address of the signing key
+	sign   SignerFn          // Signer function to authorize hashes with
 }
 
-func NewEngine(cfg *istanbul.Config, signer common.Address, sign SignerFn) *Engine {
+func NewEngine(cfg *istanbul.Config, signer libcommon.Address, sign SignerFn) *Engine {
 	return &Engine{
 		cfg:    cfg,
 		signer: signer,
@@ -43,11 +44,11 @@ func NewEngine(cfg *istanbul.Config, signer common.Address, sign SignerFn) *Engi
 	}
 }
 
-func (e *Engine) Author(header *types.Header) (common.Address, error) {
+func (e *Engine) Author(header *types.Header) (libcommon.Address, error) {
 	// Retrieve the signature from the header extra-data
 	extra, err := types.ExtractIstanbulExtra(header)
 	if err != nil {
-		return common.Address{}, err
+		return libcommon.Address{}, err
 	}
 
 	addr, err := istanbul.GetSignatureAddress(sigHash(header).Bytes(), extra.Seal)
@@ -262,7 +263,7 @@ func (e *Engine) VerifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 }
 
 func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header, validators istanbul.ValidatorSet) error {
-	header.Coinbase = common.Address{}
+	header.Coinbase = libcommon.Address{}
 	header.Nonce = istanbulcommon.EmptyBlockNonce
 	header.MixDigest = types.IstanbulDigest
 
@@ -284,9 +285,9 @@ func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 
 	num := big.NewInt(0).SetUint64(number - 1)
 	validatorContract := e.cfg.GetValidatorContractAddress(num)
-	var addresses []common.Address
-	if validatorContract != (common.Address{}) && e.cfg.GetValidatorSelectionMode(num) == params.ContractMode {
-		addresses = []common.Address{}
+	var addresses []libcommon.Address
+	if validatorContract != (libcommon.Address{}) && e.cfg.GetValidatorSelectionMode(num) == params.ContractMode {
+		addresses = []libcommon.Address{}
 	} else {
 		// add validators in snapshot to extraData's validators section
 		addresses = validator.SortedAddresses(validators.List())
@@ -388,7 +389,7 @@ func (e *Engine) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, 
 	return new(big.Int)
 }
 
-func (e *Engine) ExtractGenesisValidators(header *types.Header) ([]common.Address, error) {
+func (e *Engine) ExtractGenesisValidators(header *types.Header) ([]libcommon.Address, error) {
 	extra, err := types.ExtractIstanbulExtra(header)
 	if err != nil {
 		return nil, err
@@ -397,15 +398,15 @@ func (e *Engine) ExtractGenesisValidators(header *types.Header) ([]common.Addres
 	return extra.Validators, nil
 }
 
-func (e *Engine) Signers(header *types.Header) ([]common.Address, error) {
+func (e *Engine) Signers(header *types.Header) ([]libcommon.Address, error) {
 	extra, err := types.ExtractIstanbulExtra(header)
 	if err != nil {
-		return []common.Address{}, err
+		return []libcommon.Address{}, err
 	}
 	committedSeal := extra.CommittedSeal
 	proposalSeal := PrepareCommittedSeal(header.Hash())
 
-	var addrs []common.Address
+	var addrs []libcommon.Address
 	// 1. Get committed seals from current header
 	for _, seal := range committedSeal {
 		// 2. Get the original address by seal and parent block hash
@@ -419,11 +420,11 @@ func (e *Engine) Signers(header *types.Header) ([]common.Address, error) {
 	return addrs, nil
 }
 
-func (e *Engine) Address() common.Address {
+func (e *Engine) Address() libcommon.Address {
 	return e.signer
 }
 
-func (e *Engine) WriteVote(header *types.Header, candidate common.Address, authorize bool) error {
+func (e *Engine) WriteVote(header *types.Header, candidate libcommon.Address, authorize bool) error {
 	header.Coinbase = candidate
 	if authorize {
 		copy(header.Nonce[:], nonceAuthVote)
@@ -434,14 +435,14 @@ func (e *Engine) WriteVote(header *types.Header, candidate common.Address, autho
 	return nil
 }
 
-func (e *Engine) ReadVote(header *types.Header) (candidate common.Address, authorize bool, err error) {
+func (e *Engine) ReadVote(header *types.Header) (candidate libcommon.Address, authorize bool, err error) {
 	switch {
 	case bytes.Equal(header.Nonce[:], nonceAuthVote):
 		authorize = true
 	case bytes.Equal(header.Nonce[:], nonceDropVote):
 		authorize = false
 	default:
-		return common.Address{}, false, istanbulcommon.ErrInvalidVote
+		return libcommon.Address{}, false, istanbulcommon.ErrInvalidVote
 	}
 
 	return header.Coinbase, authorize, nil
@@ -463,7 +464,7 @@ func sigHash(header *types.Header) (hash common.Hash) {
 }
 
 // prepareExtra returns a extra-data of the given header and validators
-func prepareExtra(header *types.Header, vals []common.Address) ([]byte, error) {
+func prepareExtra(header *types.Header, vals []libcommon.Address) ([]byte, error) {
 	var buf bytes.Buffer
 
 	// compensate the lack bytes if header.Extra is not enough IstanbulExtraVanity bytes.

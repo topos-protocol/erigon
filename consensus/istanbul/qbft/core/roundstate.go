@@ -20,13 +20,13 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 )
 
 // newRoundState creates a new roundState instance with the given view and validatorSet
-func newRoundState(view *istanbul.View, validatorSet istanbul.ValidatorSet, preprepare *qbfttypes.Preprepare, preparedRound *big.Int, preparedBlock istanbul.Proposal, pendingRequest *Request, hasBadProposal func(hash common.Hash) bool) *roundState {
+func newRoundState(view *istanbul.View, validatorSet istanbul.ValidatorSet, preprepare *qbfttypes.Preprepare, preparedRound *big.Int, preparedBlock istanbul.Proposal, pendingRequest *Request, hasBadProposal func(hash libcommon.Hash) bool) *roundState {
 	return &roundState{
 		round:      view.Round,
 		sequence:   view.Sequence,
@@ -58,7 +58,7 @@ type roundState struct {
 	preparedBlock  istanbul.Proposal
 
 	mu             *sync.RWMutex
-	hasBadProposal func(hash common.Hash) bool
+	hasBadProposal func(hash libcommon.Hash) bool
 
 	// Keep track of preprepare sent messages
 	preprepareSent *big.Int

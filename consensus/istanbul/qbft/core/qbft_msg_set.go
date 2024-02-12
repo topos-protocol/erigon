@@ -23,7 +23,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/rlp"
@@ -37,7 +37,7 @@ func newQBFTMsgSet(valSet istanbul.ValidatorSet) *qbftMsgSet {
 			Sequence: new(big.Int),
 		},
 		messagesMu: new(sync.Mutex),
-		messages:   make(map[common.Address]qbfttypes.QBFTMessage),
+		messages:   make(map[libcommon.Address]qbfttypes.QBFTMessage),
 		valSet:     valSet,
 	}
 }
@@ -48,12 +48,12 @@ type qbftMsgSet struct {
 	view       *istanbul.View
 	valSet     istanbul.ValidatorSet
 	messagesMu *sync.Mutex
-	messages   map[common.Address]qbfttypes.QBFTMessage
+	messages   map[libcommon.Address]qbfttypes.QBFTMessage
 }
 
 // qbftMsgMapAsStruct is a temporary holder struct to convert messages map to a slice when Encoding and Decoding qbftMsgSet
 type qbftMsgMapAsStruct struct {
-	Address common.Address
+	Address libcommon.Address
 	Msg     qbfttypes.QBFTMessage
 }
 
@@ -85,7 +85,7 @@ func (ms *qbftMsgSet) Size() int {
 	return len(ms.messages)
 }
 
-func (ms *qbftMsgSet) Get(addr common.Address) qbfttypes.QBFTMessage {
+func (ms *qbftMsgSet) Get(addr libcommon.Address) qbfttypes.QBFTMessage {
 	ms.messagesMu.Lock()
 	defer ms.messagesMu.Unlock()
 	return ms.messages[addr]
@@ -146,7 +146,7 @@ func (ms *qbftMsgSet) DecodeRLP(stream *rlp.Stream) error {
 	}
 
 	// convert the messages struct slice back to map
-	messages := make(map[common.Address]qbfttypes.QBFTMessage)
+	messages := make(map[libcommon.Address]qbfttypes.QBFTMessage)
 	for _, msgStruct := range msgSet.MessagesSlice {
 		messages[msgStruct.Address] = msgStruct.Msg
 	}

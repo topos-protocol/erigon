@@ -19,7 +19,7 @@ package core
 import (
 	"fmt"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 )
@@ -72,7 +72,7 @@ type Request struct {
 // Subject represents the message sent when msgPrepare and msgCommit is broadcasted
 type Subject struct {
 	View   *istanbul.View
-	Digest common.Hash
+	Digest libcommon.Hash
 }
 
 func (b *Subject) String() string {

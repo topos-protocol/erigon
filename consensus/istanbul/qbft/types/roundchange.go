@@ -6,7 +6,7 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -30,7 +30,7 @@ func NewRoundChange(sequence *big.Int, round *big.Int, preparedRound *big.Int, p
 				Round:    round,
 			},
 			PreparedRound:  preparedRound,
-			PreparedDigest: common.Hash{},
+			PreparedDigest: libcommon.Hash{},
 		},
 	}
 
@@ -45,7 +45,7 @@ func NewRoundChange(sequence *big.Int, round *big.Int, preparedRound *big.Int, p
 type SignedRoundChangePayload struct {
 	CommonPayload
 	PreparedRound  *big.Int
-	PreparedDigest common.Hash
+	PreparedDigest libcommon.Hash
 }
 
 func (p *SignedRoundChangePayload) String() string {
@@ -138,7 +138,7 @@ func (p *SignedRoundChangePayload) DecodeRLP(stream *rlp.Stream) error {
 
 func (p *SignedRoundChangePayload) encodePayloadInternal() ([]byte, error) {
 	var prepared = []interface{}{}
-	if p.PreparedRound != nil && !common.EmptyHash(p.PreparedDigest) {
+	if p.PreparedRound != nil && !(p.PreparedDigest == libcommon.Hash{} /* empty hash */) {
 		prepared = []interface{}{p.PreparedRound, p.PreparedDigest}
 	}
 	return rlp.EncodeToBytes(

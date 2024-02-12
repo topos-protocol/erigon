@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	metrics "github.com/ledgerwatch/erigon-lib/metrics"
-	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -33,9 +33,9 @@ import (
 )
 
 var (
-	roundMeter     = metrics.NewRegisteredMeter("consensus/istanbul/qbft/core/round", nil)
-	sequenceMeter  = metrics.NewRegisteredMeter("consensus/istanbul/qbft/core/sequence", nil)
-	consensusTimer = metrics.NewRegisteredTimer("consensus/istanbul/qbft/core/consensus", nil)
+	roundMeter     = metrics.NewCounter("consensus/istanbul/qbft/core/round")
+	sequenceMeter  = metrics.NewCounter("consensus/istanbul/qbft/core/sequence")
+	consensusTimer = metrics.NewHistTimer("consensus/istanbul/qbft/core/consensus")
 )
 
 // New creates an Istanbul consensus core
@@ -47,7 +47,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) istanbul.Core {
 		handlerWg:          new(sync.WaitGroup),
 		logger:             log.New("address", backend.Address()),
 		backend:            backend,
-		backlogs:           make(map[common.Address]*prque.Prque),
+		backlogs:           make(map[libcommon.Address]*prque.Prque),
 		backlogsMu:         new(sync.Mutex),
 		pendingRequests:    prque.New(),
 		pendingRequestsMu:  new(sync.Mutex),
@@ -62,7 +62,7 @@ func New(backend istanbul.Backend, config *istanbul.Config) istanbul.Core {
 
 type core struct {
 	config  *istanbul.Config
-	address common.Address
+	address libcommon.Address
 	state   State
 	logger  log.Logger
 
@@ -73,9 +73,9 @@ type core struct {
 	futurePreprepareTimer *time.Timer
 
 	valSet     istanbul.ValidatorSet
-	validateFn func([]byte, []byte) (common.Address, error)
+	validateFn func([]byte, []byte) (libcommon.Address, error)
 
-	backlogs   map[common.Address]*prque.Prque
+	backlogs   map[libcommon.Address]*prque.Prque
 	backlogsMu *sync.Mutex
 
 	current      *roundState
@@ -111,7 +111,7 @@ func (c *core) IsProposer() bool {
 	return v.IsProposer(c.backend.Address())
 }
 
-func (c *core) IsCurrentProposal(blockHash common.Hash) bool {
+func (c *core) IsCurrentProposal(blockHash libcommon.Hash) bool {
 	return c.current != nil && c.current.pendingRequest != nil && c.current.pendingRequest.Proposal.Hash() == blockHash
 }
 
@@ -142,7 +142,7 @@ func (c *core) startNewRound(round *big.Int) {
 		logger.Debug("QBFT: start at the initial round")
 	} else if lastProposal.Number().Cmp(c.current.Sequence()) >= 0 {
 		diff := new(big.Int).Sub(lastProposal.Number(), c.current.Sequence())
-		sequenceMeter.Mark(new(big.Int).Add(diff, common.Big1).Int64())
+		sequenceMeter.Mark(new(big.Int).Add(diff, libcommon.Big1).Int64())
 
 		if !c.consensusTimestamp.IsZero() {
 			consensusTimer.UpdateSince(c.consensusTimestamp)
@@ -150,7 +150,7 @@ func (c *core) startNewRound(round *big.Int) {
 		}
 		logger.Debug("QBFT: catch up last block proposal")
 	} else if lastProposal.Number().Cmp(big.NewInt(c.current.Sequence().Int64()-1)) == 0 {
-		if round.Cmp(common.Big0) == 0 {
+		if round.Cmp(libcommon.Big0) == 0 {
 			// same seq and round, don't need to start new round
 			logger.Debug("QBFT: same round, no need to start new round")
 			return
@@ -180,7 +180,7 @@ func (c *core) startNewRound(round *big.Int) {
 		}
 	} else {
 		newView = &istanbul.View{
-			Sequence: new(big.Int).Add(lastProposal.Number(), common.Big1),
+			Sequence: new(big.Int).Add(lastProposal.Number(), libcommon.Big1),
 			Round:    new(big.Int),
 		}
 		c.valSet = c.backend.Validators(lastProposal)
@@ -238,7 +238,7 @@ func (c *core) setState(state State) {
 	c.processBacklog()
 }
 
-func (c *core) Address() common.Address {
+func (c *core) Address() libcommon.Address {
 	return c.address
 }
 
@@ -299,7 +299,7 @@ func (c *core) newRoundChangeTimer() {
 	})
 }
 
-func (c *core) checkValidatorSignature(data []byte, sig []byte) (common.Address, error) {
+func (c *core) checkValidatorSignature(data []byte, sig []byte) (libcommon.Address, error) {
 	return istanbul.CheckValidatorSignature(c.valSet, data, sig)
 }
 
