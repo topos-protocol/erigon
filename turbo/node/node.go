@@ -113,6 +113,8 @@ func New(
 	ethConfig *ethconfig.Config,
 	logger log.Logger,
 ) (*ErigonNode, error) {
+	logger.Info(">>>>>>>>>>>>>>>>>> New Node, ethConfig:", ethConfig)
+	logger.Info(">>>>>>>>>>>>>>>>>> New Node, nodeConfig:", nodeConfig)
 	//prepareBuckets(optionalParams.CustomBuckets)
 	node, err := node.New(ctx, nodeConfig, logger)
 	if err != nil {

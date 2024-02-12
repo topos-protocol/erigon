@@ -19,6 +19,8 @@ import (
 	"github.com/ledgerwatch/erigon/consensus/clique"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
 	"github.com/ledgerwatch/erigon/consensus/ethash/ethashcfg"
+	"github.com/ledgerwatch/erigon/consensus/istanbul"
+	istanbulBackend "github.com/ledgerwatch/erigon/consensus/istanbul/backend"
 	"github.com/ledgerwatch/erigon/consensus/merge"
 	"github.com/ledgerwatch/erigon/node"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
@@ -31,6 +33,8 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 	logger log.Logger,
 ) consensus.Engine {
 	var eng consensus.Engine
+
+	logger.Info(">>>>>>>>>>>>>>>>>> CreateConsensusEngine")
 
 	switch consensusCfg := config.(type) {
 	case *ethashcfg.Config:
@@ -55,7 +59,9 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 			}, notify, noVerify)
 		}
 	case *params.ConsensusSnapshotConfig:
+		logger.Info(">>>>>>>>>>>>>>>>>> ConsensusSnapshotConfig")
 		if chainConfig.Clique != nil {
+			logger.Info(">>>>>>>>>>>>>>>>>> chainConfig:", chainConfig)
 			if consensusCfg.InMemory {
 				nodeConfig.Dirs.DataDir = ""
 			} else {
@@ -78,6 +84,18 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 			}
 
 			eng = clique.New(chainConfig, consensusCfg, db, logger)
+		}
+		// If Istanbul is requested, set it up
+		if chainConfig.Istanbul != nil {
+			log.Warn("WARNING: The attribute config.istanbul is deprecated and will be removed in the future, please use config.ibft on genesis file")
+			if chainConfig.Istanbul.Epoch != 0 {
+				config.Istanbul.Epoch = chainConfig.Istanbul.Epoch
+			}
+			config.Istanbul.ProposerPolicy = istanbul.NewProposerPolicy(istanbul.ProposerPolicyId(chainConfig.Istanbul.ProposerPolicy))
+			config.Istanbul.Ceil2Nby3Block = chainConfig.Istanbul.Ceil2Nby3Block
+			config.Istanbul.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
+			config.Istanbul.TestQBFTBlock = chainConfig.Istanbul.TestQBFTBlock
+			return istanbulBackend.New(&config.Istanbul, stack.GetNodeKey(), db)
 		}
 	case *chain.AuRaConfig:
 		if chainConfig.Aura != nil {
@@ -133,6 +151,8 @@ func CreateConsensusEngineBareBones(ctx context.Context, chainConfig *chain.Conf
 
 	if chainConfig.Clique != nil {
 		consensusConfig = params.CliqueSnapshot
+	} else if chainConfig.Istanbul != nil {
+		consensusConfig = chainConfig.Istanbul
 	} else if chainConfig.Aura != nil {
 		consensusConfig = chainConfig.Aura
 	} else if chainConfig.Bor != nil {

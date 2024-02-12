@@ -209,8 +209,12 @@ type Config struct {
 	Ethash ethashcfg.Config
 
 	Clique params.ConsensusSnapshotConfig
-	Aura   chain.AuRaConfig
-	Bor    chain.BorConfig
+
+	// Istanbul options
+	Istanbul chain.IBFTConfig
+
+	Aura chain.AuRaConfig
+	Bor  chain.BorConfig
 
 	// Transaction pool options
 	DeprecatedTxPool DeprecatedTxPoolConfig

@@ -117,7 +117,7 @@ func InitMiner(ctx context.Context, genesis *types.Genesis, privKey *ecdsa.Priva
 	if err != nil {
 		return nil, nil, err
 	}
-
+	logger.Info(">>>>>>>>>>>>>>>>>> Here setting eth config")
 	ethCfg := &ethconfig.Config{
 		Dirs:      datadir.New(ddir),
 		Genesis:   genesis,
@@ -151,6 +151,7 @@ func InitMiner(ctx context.Context, genesis *types.Genesis, privKey *ecdsa.Priva
 	ethCfg.TxPool.AccountSlots = 1000000
 	ethCfg.DeprecatedTxPool.AccountSlots = 1000000
 	ethCfg.DeprecatedTxPool.GlobalSlots = 1000000
+	logger.Info(">>>>>>>>>>>>>>>>>> ethCfg:", ethCfg)
 
 	ethBackend, err := eth.New(ctx, stack, ethCfg, logger)
 	if err != nil {

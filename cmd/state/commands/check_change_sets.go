@@ -284,6 +284,8 @@ func initConsensusEngine(ctx context.Context, cc *chain2.Config, snapshots *free
 
 	if cc.Clique != nil {
 		consensusConfig = params.CliqueSnapshot
+	} else if cc.Istanbul != nil {
+		consensusConfig = &config.Istanbul
 	} else if cc.Aura != nil {
 		consensusConfig = &config.Aura
 	} else if cc.Bor != nil {
