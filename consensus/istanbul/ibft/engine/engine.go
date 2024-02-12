@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"time"
 
+	libchain "github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
@@ -15,7 +16,6 @@ import (
 	"github.com/ledgerwatch/erigon/consensus/istanbul/validator"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
 	"golang.org/x/crypto/sha3"
 )
@@ -285,7 +285,7 @@ func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	num := big.NewInt(0).SetUint64(number - 1)
 	validatorContract := e.cfg.GetValidatorContractAddress(num)
 	var addresses []libcommon.Address
-	if validatorContract != (libcommon.Address{}) && e.cfg.GetValidatorSelectionMode(num) == params.ContractMode {
+	if validatorContract != (libcommon.Address{}) && e.cfg.GetValidatorSelectionMode(num) == libchain.ContractMode {
 		addresses = []libcommon.Address{}
 	} else {
 		// add validators in snapshot to extraData's validators section

@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"time"
 
+	libchain "github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -443,7 +444,7 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 	targetBlockHeight := new(big.Int).SetUint64(number)
 	validatorContract := sb.config.GetValidatorContractAddress(targetBlockHeight)
 	// we only need to update the validator set if it's a new block
-	if len(headers) == 0 && validatorContract != (common.Address{}) && sb.config.GetValidatorSelectionMode(targetBlockHeight) == params.ContractMode {
+	if len(headers) == 0 && validatorContract != (common.Address{}) && sb.config.GetValidatorSelectionMode(targetBlockHeight) == libchain.ContractMode {
 		sb.logger.Trace("Applying snap with smart contract validators", "address", validatorContract, "client", sb.config.Client)
 
 		validatorContractCaller, err := contract.NewValidatorContractInterfaceCaller(validatorContract, sb.config.Client)

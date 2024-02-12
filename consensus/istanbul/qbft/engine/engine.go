@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"time"
 
+	libchain "github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -14,7 +15,6 @@ import (
 	"github.com/ledgerwatch/erigon/consensus/istanbul/validator"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rlp"
 	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/crypto/sha3"
@@ -337,7 +337,7 @@ func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 
 	currentBlockNumber := big.NewInt(0).SetUint64(number - 1)
 	validatorContract := e.cfg.GetValidatorContractAddress(currentBlockNumber)
-	if validatorContract != (libcommon.Address{}) && e.cfg.GetValidatorSelectionMode(currentBlockNumber) == params.ContractMode {
+	if validatorContract != (libcommon.Address{}) && e.cfg.GetValidatorSelectionMode(currentBlockNumber) == libchain.ContractMode {
 		return ApplyHeaderQBFTExtra(
 			header,
 			WriteValidators([]libcommon.Address{}),

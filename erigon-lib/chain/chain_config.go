@@ -17,14 +17,17 @@
 package chain
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/fixedgas"
 	"github.com/ledgerwatch/erigon/common/math"
+	"github.com/ledgerwatch/log/v3"
 )
 
 // Config is the core config which determines the blockchain settings.
@@ -680,6 +683,67 @@ func borKeyValueConfigHelper[T uint64 | common.Address](field map[string]T, numb
 	}
 
 	return fieldUint[keys[len(keys)-1]]
+}
+
+func (c *Config) GetBlockReward(num *big.Int) big.Int {
+	blockReward := *math.NewHexOrDecimal256(0)
+
+	if c.QBFT != nil && c.QBFT.BlockReward != nil {
+		blockReward = *c.QBFT.BlockReward
+	}
+
+	c.GetTransitionValue(num, func(transition Transition) {
+		if transition.BlockReward != nil {
+			blockReward = *transition.BlockReward
+		}
+	})
+
+	return big.Int(blockReward)
+}
+
+// Quorum
+// gets value at or after a transition
+func (c *Config) GetTransitionValue(num *big.Int, callback func(transition Transition)) {
+	if c != nil && num != nil && c.Transitions != nil {
+		for i := 0; i < len(c.Transitions) && c.Transitions[i].Block.Cmp(num) <= 0; i++ {
+			callback(c.Transitions[i])
+		}
+	}
+}
+
+func (c *Config) GetRewardAccount(num *big.Int, coinbase common.Address) (common.Address, error) {
+	beneficiaryMode := "validator"
+	miningBeneficiary := common.Address{}
+
+	if c.QBFT != nil && c.QBFT.MiningBeneficiary != nil {
+		miningBeneficiary = *c.QBFT.MiningBeneficiary
+		beneficiaryMode = "fixed"
+	}
+
+	if c.QBFT != nil && c.QBFT.BeneficiaryMode != nil {
+		beneficiaryMode = *c.QBFT.BeneficiaryMode
+	}
+
+	c.GetTransitionValue(num, func(transition Transition) {
+		if transition.BeneficiaryMode != nil && (*transition.BeneficiaryMode == "validators" || *transition.BeneficiaryMode == "validator") {
+			beneficiaryMode = "validator"
+		}
+		if transition.MiningBeneficiary != nil && (transition.BeneficiaryMode == nil || *transition.BeneficiaryMode == "fixed") {
+			miningBeneficiary = *transition.MiningBeneficiary
+			beneficiaryMode = "fixed"
+		}
+	})
+
+	switch strings.ToLower(beneficiaryMode) {
+	case "fixed":
+		log.Trace("fixed beneficiary mode", "miningBeneficiary", miningBeneficiary)
+		return miningBeneficiary, nil
+	case "validator":
+		log.Trace("validator beneficiary mode", "coinbase", coinbase)
+		return coinbase, nil
+	}
+
+	return common.Address{}, errors.New("BeneficiaryMode must be coinbase|fixed")
 }
 
 type sprint struct {
