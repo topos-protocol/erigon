@@ -320,9 +320,13 @@ func (e *Engine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = nilUncleHash
 
+	var transactions []types.Transaction = make([]types.Transaction, len(txs))
+	for i, tx := range txs {
+		transactions[i] = *tx
+	}
 	// Assemble and return the final block for sealing
 	// return types.NewBlock(header, txs, nil, receipts, new(trie.Trie)), nil
-	return types.NewBlock(header, *txs, nil, receipts, nil /*withdrawals*/), nil
+	return types.NewBlock(header, transactions, nil, receipts, nil /*withdrawals*/), nil
 }
 
 // Seal generates a new block for the given input block with the local miner's

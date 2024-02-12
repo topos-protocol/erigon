@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -382,7 +381,7 @@ func WriteValidators(validators []libcommon.Address) ApplyQBFTExtra {
 func (e *Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header) {
 	// Accumulate any block and uncle rewards and commit the final state root
 	e.accumulateRewards(chain, state, header)
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = nilUncleHash
 }
 
@@ -390,8 +389,12 @@ func (e *Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 // nor block rewards given, and returns the final block.
 func (e *Engine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	e.Finalize(chain, header, state, txs, uncles)
+	var transactions []types.Transaction = make([]types.Transaction, len(txs))
+	for i, tx := range txs {
+		transactions[i] = *tx
+	}
 	// Assemble and return the final block for sealing
-	return types.NewBlock(header, txs, nil, receipts, new(trie.Trie)), nil
+	return types.NewBlock(header, transactions, nil, receipts, nil), nil
 }
 
 // Seal generates a new block for the given input block with the local miner's
