@@ -23,8 +23,8 @@ import (
 	"time"
 
 	libchain "github.com/ledgerwatch/erigon-lib/chain"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
-	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	"github.com/ledgerwatch/erigon/consensus/istanbul/backend/contract"
@@ -48,14 +48,14 @@ const (
 // Author retrieves the Ethereum address of the account that minted the given
 // block, which may be different from the header's coinbase if a consensus
 // engine is based on signatures.
-func (sb *Backend) Author(header *types.Header) (common.Address, error) {
+func (sb *Backend) Author(header *types.Header) (libcommon.Address, error) {
 	return sb.EngineForBlockNumber(header.Number).Author(header)
 }
 
 // Signers extracts all the addresses who have signed the given header
 // It will extract for each seal who signed it, regardless of if the seal is
 // repeated
-func (sb *Backend) Signers(header *types.Header) ([]common.Address, error) {
+func (sb *Backend) Signers(header *types.Header) ([]libcommon.Address, error) {
 	return sb.EngineForBlockNumber(header.Number).Signers(header)
 }
 
@@ -147,7 +147,7 @@ func (sb *Backend) Prepare(chain consensus.ChainHeaderReader, header *types.Head
 
 	// get valid candidate list
 	sb.candidatesLock.RLock()
-	var addresses []common.Address
+	var addresses []libcommon.Address
 	var authorizes []bool
 	for address, authorize := range sb.candidates {
 		if snap.checkVote(address, authorize) {
@@ -219,7 +219,7 @@ func (sb *Backend) Seal(chain consensus.ChainHeaderReader, block *types.Block, r
 		sb.proposedBlockHash = block.Hash()
 
 		defer func() {
-			sb.proposedBlockHash = common.Hash{}
+			sb.proposedBlockHash = libcommon.Hash{}
 			sb.sealMu.Unlock()
 		}()
 		// post block into Istanbul engine
@@ -255,7 +255,7 @@ func (sb *Backend) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 }
 
 // Start implements consensus.Istanbul.Start
-func (sb *Backend) Start(chain consensus.ChainHeaderReader, currentBlock func() *types.Block, hasBadBlock func(db ethdb.Reader, hash common.Hash) bool) error {
+func (sb *Backend) Start(chain consensus.ChainHeaderReader, currentBlock func() *types.Block, hasBadBlock func(db ethdb.Reader, hash libcommon.Hash) bool) error {
 	sb.coreMu.Lock()
 	defer sb.coreMu.Unlock()
 	if sb.coreStarted {
@@ -263,7 +263,7 @@ func (sb *Backend) Start(chain consensus.ChainHeaderReader, currentBlock func() 
 	}
 
 	// clear previous data
-	sb.proposedBlockHash = common.Hash{}
+	sb.proposedBlockHash = libcommon.Hash{}
 	if sb.commitCh != nil {
 		close(sb.commitCh)
 	}
@@ -307,7 +307,7 @@ func (sb *Backend) Stop() error {
 	return nil
 }
 
-func addrsToString(addrs []common.Address) []string {
+func addrsToString(addrs []libcommon.Address) []string {
 	strs := make([]string, len(addrs))
 	for i, addr := range addrs {
 		strs[i] = addr.String()
@@ -337,7 +337,7 @@ func (sb *Backend) storeSnap(snap *Snapshot) error {
 }
 
 // snapshot retrieves the authorization snapshot at a given point in time.
-func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, hash common.Hash, parents []*types.Header) (*Snapshot, error) {
+func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, hash libcommon.Hash, parents []*types.Header) (*Snapshot, error) {
 	// Search for a snapshot in memory or on disk for checkpoints
 	var (
 		headers []*types.Header
@@ -367,9 +367,9 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 				return nil, err
 			}
 
-			var validators []common.Address
+			var validators []libcommon.Address
 			validatorContract := sb.config.GetValidatorContractAddress(big.NewInt(0))
-			if validatorContract != (common.Address{}) && sb.config.GetValidatorSelectionMode(big.NewInt(0)) == params.ContractMode {
+			if validatorContract != (libcommon.Address{}) && sb.config.GetValidatorSelectionMode(big.NewInt(0)) == params.ContractMode {
 				validatorContractCaller, err := contract.NewValidatorContractInterfaceCaller(validatorContract, sb.config.Client)
 
 				if err != nil {
@@ -444,7 +444,7 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 	targetBlockHeight := new(big.Int).SetUint64(number)
 	validatorContract := sb.config.GetValidatorContractAddress(targetBlockHeight)
 	// we only need to update the validator set if it's a new block
-	if len(headers) == 0 && validatorContract != (common.Address{}) && sb.config.GetValidatorSelectionMode(targetBlockHeight) == libchain.ContractMode {
+	if len(headers) == 0 && validatorContract != (libcommon.Address{}) && sb.config.GetValidatorSelectionMode(targetBlockHeight) == libchain.ContractMode {
 		sb.logger.Trace("Applying snap with smart contract validators", "address", validatorContract, "client", sb.config.Client)
 
 		validatorContractCaller, err := contract.NewValidatorContractInterfaceCaller(validatorContract, sb.config.Client)
@@ -484,7 +484,7 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 }
 
 // SealHash returns the hash of a block prior to it being sealed.
-func (sb *Backend) SealHash(header *types.Header) common.Hash {
+func (sb *Backend) SealHash(header *types.Header) libcommon.Hash {
 	return sb.EngineForBlockNumber(header.Number).SealHash(header)
 }
 
@@ -526,7 +526,7 @@ func (sb *Backend) snapApplyHeader(snap *Snapshot, header *types.Header) error {
 	number := header.Number.Uint64()
 	if number%snap.Epoch == 0 {
 		snap.Votes = nil
-		snap.Tally = make(map[common.Address]Tally)
+		snap.Tally = make(map[libcommon.Address]Tally)
 	}
 
 	// Resolve the authorization key and check against validators

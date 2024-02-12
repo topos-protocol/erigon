@@ -20,10 +20,10 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	"github.com/ledgerwatch/erigon/consensus/istanbul/validator"
-	"github.com/ledgerwatch/erigon/ethdb"
 )
 
 const (
@@ -33,10 +33,10 @@ const (
 // Vote represents a single vote that an authorized validator made to modify the
 // list of authorizations.
 type Vote struct {
-	Validator common.Address `json:"validator"` // Authorized validator that cast this vote
-	Block     uint64         `json:"block"`     // Block number the vote was cast in (expire old votes)
-	Address   common.Address `json:"address"`   // Account being voted on to change its authorization
-	Authorize bool           `json:"authorize"` // Whether to authorize or deauthorize the voted account
+	Validator libcommon.Address `json:"validator"` // Authorized validator that cast this vote
+	Block     uint64            `json:"block"`     // Block number the vote was cast in (expire old votes)
+	Address   libcommon.Address `json:"address"`   // Account being voted on to change its authorization
+	Authorize bool              `json:"authorize"` // Whether to authorize or deauthorize the voted account
 }
 
 // Tally is a simple vote tally to keep the current score of votes. Votes that
@@ -50,29 +50,29 @@ type Tally struct {
 type Snapshot struct {
 	Epoch uint64 // The number of blocks after which to checkpoint and reset the pending votes
 
-	Number uint64                   // Block number where the snapshot was created
-	Hash   common.Hash              // Block hash where the snapshot was created
-	Votes  []*Vote                  // List of votes cast in chronological order
-	Tally  map[common.Address]Tally // Current vote tally to avoid recalculating
-	ValSet istanbul.ValidatorSet    // Set of authorized validators at this moment
+	Number uint64                      // Block number where the snapshot was created
+	Hash   libcommon.Hash              // Block hash where the snapshot was created
+	Votes  []*Vote                     // List of votes cast in chronological order
+	Tally  map[libcommon.Address]Tally // Current vote tally to avoid recalculating
+	ValSet istanbul.ValidatorSet       // Set of authorized validators at this moment
 }
 
 // newSnapshot create a new snapshot with the specified startup parameters. This
 // method does not initialize the set of recent validators, so only ever use if for
 // the genesis block.
-func newSnapshot(epoch uint64, number uint64, hash common.Hash, valSet istanbul.ValidatorSet) *Snapshot {
+func newSnapshot(epoch uint64, number uint64, hash libcommon.Hash, valSet istanbul.ValidatorSet) *Snapshot {
 	snap := &Snapshot{
 		Epoch:  epoch,
 		Number: number,
 		Hash:   hash,
 		ValSet: valSet,
-		Tally:  make(map[common.Address]Tally),
+		Tally:  make(map[libcommon.Address]Tally),
 	}
 	return snap
 }
 
 // loadSnapshot loads an existing snapshot from the database.
-func loadSnapshot(epoch uint64, db ethdb.Database, hash common.Hash) (*Snapshot, error) {
+func loadSnapshot(epoch uint64, db kv.RwDB, hash libcommon.Hash) (*Snapshot, error) {
 	blob, err := db.Get(append([]byte(dbKeySnapshotPrefix), hash[:]...))
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func loadSnapshot(epoch uint64, db ethdb.Database, hash common.Hash) (*Snapshot,
 }
 
 // store inserts the snapshot into the database.
-func (s *Snapshot) store(db ethdb.Database) error {
+func (s *Snapshot) store(db kv.RwDB) error {
 	blob, err := json.Marshal(s)
 	if err != nil {
 		return err
@@ -103,7 +103,7 @@ func (s *Snapshot) copy() *Snapshot {
 		Hash:   s.Hash,
 		ValSet: s.ValSet.Copy(),
 		Votes:  make([]*Vote, len(s.Votes)),
-		Tally:  make(map[common.Address]Tally),
+		Tally:  make(map[libcommon.Address]Tally),
 	}
 
 	for address, tally := range s.Tally {
@@ -115,13 +115,13 @@ func (s *Snapshot) copy() *Snapshot {
 }
 
 // checkVote return whether it's a valid vote
-func (s *Snapshot) checkVote(address common.Address, authorize bool) bool {
+func (s *Snapshot) checkVote(address libcommon.Address, authorize bool) bool {
 	_, validator := s.ValSet.GetByAddress(address)
 	return (validator != nil && !authorize) || (validator == nil && authorize)
 }
 
 // cast adds a new vote into the tally.
-func (s *Snapshot) cast(address common.Address, authorize bool) bool {
+func (s *Snapshot) cast(address libcommon.Address, authorize bool) bool {
 	// Ensure the vote is meaningful
 	if !s.checkVote(address, authorize) {
 		return false
@@ -137,7 +137,7 @@ func (s *Snapshot) cast(address common.Address, authorize bool) bool {
 }
 
 // uncast removes a previously cast vote from the tally.
-func (s *Snapshot) uncast(address common.Address, authorize bool) bool {
+func (s *Snapshot) uncast(address libcommon.Address, authorize bool) bool {
 	// If there's no tally, it's a dangling vote, just drop
 	tally, ok := s.Tally[address]
 	if !ok {
@@ -158,8 +158,8 @@ func (s *Snapshot) uncast(address common.Address, authorize bool) bool {
 }
 
 // validators retrieves the list of authorized validators in ascending order.
-func (s *Snapshot) validators() []common.Address {
-	validators := make([]common.Address, 0, s.ValSet.Size())
+func (s *Snapshot) validators() []libcommon.Address {
+	validators := make([]libcommon.Address, 0, s.ValSet.Size())
 	for _, validator := range s.ValSet.List() {
 		validators = append(validators, validator.Address())
 	}
@@ -174,14 +174,14 @@ func (s *Snapshot) validators() []common.Address {
 }
 
 type snapshotJSON struct {
-	Epoch  uint64                   `json:"epoch"`
-	Number uint64                   `json:"number"`
-	Hash   common.Hash              `json:"hash"`
-	Votes  []*Vote                  `json:"votes"`
-	Tally  map[common.Address]Tally `json:"tally"`
+	Epoch  uint64                      `json:"epoch"`
+	Number uint64                      `json:"number"`
+	Hash   libcommon.Hash              `json:"hash"`
+	Votes  []*Vote                     `json:"votes"`
+	Tally  map[libcommon.Address]Tally `json:"tally"`
 
 	// for validator set
-	Validators []common.Address          `json:"validators"`
+	Validators []libcommon.Address       `json:"validators"`
 	Policy     istanbul.ProposerPolicyId `json:"policy"`
 }
 

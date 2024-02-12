@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/holiman/uint256"
 	libchain "github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
@@ -565,6 +566,7 @@ func (e *Engine) accumulateRewards(chain consensus.ChainHeaderReader, state *sta
 		rewardAccount, _ := chain.Config().GetRewardAccount(header.Number, coinbase)
 		log.Trace("QBFT: accumulate rewards to", "rewardAccount", rewardAccount, "blockReward", blockReward)
 
-		state.AddBalance(rewardAccount, &blockReward)
+		reward, _ := uint256.FromBig(&blockReward)
+		state.AddBalance(rewardAccount, reward)
 	}
 }

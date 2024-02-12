@@ -19,7 +19,7 @@ package backend
 import (
 	"errors"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -35,18 +35,18 @@ type API struct {
 // BlockSigners is contains who created and who signed a particular block, denoted by its number and hash
 type BlockSigners struct {
 	Number     uint64
-	Hash       common.Hash
-	Author     common.Address
-	Committers []common.Address
+	Hash       libcommon.Hash
+	Author     libcommon.Address
+	Committers []libcommon.Address
 }
 
 type Status struct {
-	SigningStatus map[common.Address]int `json:"sealerActivity"`
-	NumBlocks     uint64                 `json:"numBlocks"`
+	SigningStatus map[libcommon.Address]int `json:"sealerActivity"`
+	NumBlocks     uint64                    `json:"numBlocks"`
 }
 
 // NodeAddress returns the public address that is used to sign block headers in IBFT
-func (api *API) NodeAddress() common.Address {
+func (api *API) NodeAddress() libcommon.Address {
 	return api.backend.Address()
 }
 
@@ -69,7 +69,7 @@ func (api *API) GetSignersFromBlock(number *rpc.BlockNumber) (*BlockSigners, err
 }
 
 // GetSignersFromBlockByHash returns the signers and minter for a given block hash
-func (api *API) GetSignersFromBlockByHash(hash common.Hash) (*BlockSigners, error) {
+func (api *API) GetSignersFromBlockByHash(hash libcommon.Hash) (*BlockSigners, error) {
 	header := api.chain.GetHeaderByHash(hash)
 	if header == nil {
 		return nil, istanbulcommon.ErrUnknownBlock
@@ -114,7 +114,7 @@ func (api *API) GetSnapshot(number *rpc.BlockNumber) (*Snapshot, error) {
 }
 
 // GetSnapshotAtHash retrieves the state snapshot at a given block.
-func (api *API) GetSnapshotAtHash(hash common.Hash) (*Snapshot, error) {
+func (api *API) GetSnapshotAtHash(hash libcommon.Hash) (*Snapshot, error) {
 	header := api.chain.GetHeaderByHash(hash)
 	if header == nil {
 		return nil, istanbulcommon.ErrUnknownBlock
@@ -123,7 +123,7 @@ func (api *API) GetSnapshotAtHash(hash common.Hash) (*Snapshot, error) {
 }
 
 // GetValidators retrieves the list of authorized validators at the specified block.
-func (api *API) GetValidators(number *rpc.BlockNumber) ([]common.Address, error) {
+func (api *API) GetValidators(number *rpc.BlockNumber) ([]libcommon.Address, error) {
 	// Retrieve the requested block number (or current if none requested)
 	var header *types.Header
 	if number == nil || *number == rpc.LatestBlockNumber {
@@ -143,7 +143,7 @@ func (api *API) GetValidators(number *rpc.BlockNumber) ([]common.Address, error)
 }
 
 // GetValidatorsAtHash retrieves the state snapshot at a given block.
-func (api *API) GetValidatorsAtHash(hash common.Hash) ([]common.Address, error) {
+func (api *API) GetValidatorsAtHash(hash libcommon.Hash) ([]libcommon.Address, error) {
 	header := api.chain.GetHeaderByHash(hash)
 	if header == nil {
 		return nil, istanbulcommon.ErrUnknownBlock
@@ -156,11 +156,11 @@ func (api *API) GetValidatorsAtHash(hash common.Hash) ([]common.Address, error) 
 }
 
 // Candidates returns the current candidates the node tries to uphold and vote on.
-func (api *API) Candidates() map[common.Address]bool {
+func (api *API) Candidates() map[libcommon.Address]bool {
 	api.backend.candidatesLock.RLock()
 	defer api.backend.candidatesLock.RUnlock()
 
-	proposals := make(map[common.Address]bool)
+	proposals := make(map[libcommon.Address]bool)
 	for address, auth := range api.backend.candidates {
 		proposals[address] = auth
 	}
@@ -169,7 +169,7 @@ func (api *API) Candidates() map[common.Address]bool {
 
 // Propose injects a new authorization candidate that the validator will attempt to
 // push through.
-func (api *API) Propose(address common.Address, auth bool) {
+func (api *API) Propose(address libcommon.Address, auth bool) {
 	api.backend.candidatesLock.Lock()
 	defer api.backend.candidatesLock.Unlock()
 
@@ -178,7 +178,7 @@ func (api *API) Propose(address common.Address, auth bool) {
 
 // Discard drops a currently running candidate, stopping the validator from casting
 // further votes (either for or against).
-func (api *API) Discard(address common.Address) {
+func (api *API) Discard(address libcommon.Address) {
 	api.backend.candidatesLock.Lock()
 	defer api.backend.candidatesLock.Unlock()
 
@@ -236,7 +236,7 @@ func (api *API) Status(startBlockNum *rpc.BlockNumber, endBlockNum *rpc.BlockNum
 			numBlocks = 0
 		}
 	}
-	signStatus := make(map[common.Address]int)
+	signStatus := make(map[libcommon.Address]int)
 	for _, s := range signers {
 		signStatus[s] = 0
 	}

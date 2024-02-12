@@ -24,7 +24,8 @@ import (
 	"reflect"
 
 	lru "github.com/hashicorp/golang-lru/v2"
-	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon-lib/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
@@ -50,16 +51,16 @@ func (sb *Backend) Protocol() consensus.Protocol {
 	return consensus.IstanbulProtocol
 }
 
-func (sb *Backend) decode(msg p2p.Msg) ([]byte, common.Hash, error) {
+func (sb *Backend) decode(msg p2p.Msg) ([]byte, libcommon.Hash, error) {
 	var data []byte
 	if sb.IsQBFTConsensus() {
 		data = make([]byte, msg.Size)
 		if _, err := msg.Payload.Read(data); err != nil {
-			return nil, common.Hash{}, errPayloadReadFailed
+			return nil, libcommon.Hash{}, errPayloadReadFailed
 		}
 	} else {
 		if err := msg.Decode(&data); err != nil {
-			return nil, common.Hash{}, errDecodeFailed
+			return nil, libcommon.Hash{}, errDecodeFailed
 		}
 	}
 	return data, istanbul.RLPHash(data), nil

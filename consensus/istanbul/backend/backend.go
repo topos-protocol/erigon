@@ -24,6 +24,7 @@ import (
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
@@ -47,7 +48,7 @@ const (
 )
 
 // New creates an Ethereum backend for Istanbul core engine.
-func New(config *istanbul.Config, privateKey *ecdsa.PrivateKey, db ethdb.Database) *Backend {
+func New(config *istanbul.Config, privateKey *ecdsa.PrivateKey, db kv.RwDB) *Backend {
 	// Allocate the snapshot caches and create the engine
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	recentMessages, _ := lru.NewARC(inmemoryPeers)
@@ -91,7 +92,7 @@ type Backend struct {
 
 	logger log.Logger
 
-	db ethdb.Database
+	db kv.RwDB
 
 	chain        consensus.ChainHeaderReader
 	currentBlock func() *types.Block
