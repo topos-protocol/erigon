@@ -19,25 +19,26 @@ package validator
 import (
 	"bytes"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon-lib/common/length"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 )
 
-func New(addr common.Address) istanbul.Validator {
+func New(addr libcommon.Address) istanbul.Validator {
 	return &defaultValidator{
 		address: addr,
 	}
 }
 
-func NewSet(addrs []common.Address, policy *istanbul.ProposerPolicy) istanbul.ValidatorSet {
+func NewSet(addrs []libcommon.Address, policy *istanbul.ProposerPolicy) istanbul.ValidatorSet {
 	return newDefaultSet(addrs, policy)
 }
 
-func ExtractValidators(extraData []byte) []common.Address {
+func ExtractValidators(extraData []byte) []libcommon.Address {
 	// get the validator addresses
-	addrs := make([]common.Address, (len(extraData) / common.AddressLength))
+	addrs := make([]libcommon.Address, (len(extraData) / length.Addr))
 	for i := 0; i < len(addrs); i++ {
-		copy(addrs[i][:], extraData[i*common.AddressLength:])
+		copy(addrs[i][:], extraData[i*length.Addr:])
 	}
 
 	return addrs
@@ -45,11 +46,11 @@ func ExtractValidators(extraData []byte) []common.Address {
 
 // Check whether the extraData is presented in prescribed form
 func ValidExtraData(extraData []byte) bool {
-	return len(extraData)%common.AddressLength == 0
+	return len(extraData)%length.Addr == 0
 }
 
-func SortedAddresses(validators []istanbul.Validator) []common.Address {
-	addrs := make([]common.Address, len(validators))
+func SortedAddresses(validators []istanbul.Validator) []libcommon.Address {
+	addrs := make([]libcommon.Address, len(validators))
 	for i, validator := range validators {
 		addrs[i] = validator.Address()
 	}

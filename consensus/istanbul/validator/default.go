@@ -21,15 +21,15 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 )
 
 type defaultValidator struct {
-	address common.Address
+	address libcommon.Address
 }
 
-func (val *defaultValidator) Address() common.Address {
+func (val *defaultValidator) Address() libcommon.Address {
 	return val.address
 }
 
@@ -48,7 +48,7 @@ type defaultSet struct {
 	selector    istanbul.ProposalSelector
 }
 
-func newDefaultSet(addrs []common.Address, policy *istanbul.ProposerPolicy) *defaultSet {
+func newDefaultSet(addrs []libcommon.Address, policy *istanbul.ProposerPolicy) *defaultSet {
 	valSet := &defaultSet{}
 
 	valSet.policy = policy
@@ -94,7 +94,7 @@ func (valSet *defaultSet) GetByIndex(i uint64) istanbul.Validator {
 	return nil
 }
 
-func (valSet *defaultSet) GetByAddress(addr common.Address) (int, istanbul.Validator) {
+func (valSet *defaultSet) GetByAddress(addr libcommon.Address) (int, istanbul.Validator) {
 	for i, val := range valSet.List() {
 		if addr == val.Address() {
 			return i, val
@@ -107,12 +107,12 @@ func (valSet *defaultSet) GetProposer() istanbul.Validator {
 	return valSet.proposer
 }
 
-func (valSet *defaultSet) IsProposer(address common.Address) bool {
+func (valSet *defaultSet) IsProposer(address libcommon.Address) bool {
 	_, val := valSet.GetByAddress(address)
 	return reflect.DeepEqual(valSet.GetProposer(), val)
 }
 
-func (valSet *defaultSet) CalcProposer(lastProposer common.Address, round uint64) {
+func (valSet *defaultSet) CalcProposer(lastProposer libcommon.Address, round uint64) {
 	valSet.validatorMu.RLock()
 	defer valSet.validatorMu.RUnlock()
 	valSet.proposer = valSet.selector(valSet, lastProposer, round)
@@ -123,7 +123,7 @@ func (valSet *defaultSet) SortValidators() {
 	valSet.Policy().By.Sort(valSet.validators)
 }
 
-func calcSeed(valSet istanbul.ValidatorSet, proposer common.Address, round uint64) uint64 {
+func calcSeed(valSet istanbul.ValidatorSet, proposer libcommon.Address, round uint64) uint64 {
 	offset := 0
 	if idx, val := valSet.GetByAddress(proposer); val != nil {
 		offset = idx
@@ -131,11 +131,11 @@ func calcSeed(valSet istanbul.ValidatorSet, proposer common.Address, round uint6
 	return uint64(offset) + round
 }
 
-func emptyAddress(addr common.Address) bool {
-	return addr == common.Address{}
+func emptyAddress(addr libcommon.Address) bool {
+	return addr == libcommon.Address{}
 }
 
-func roundRobinProposer(valSet istanbul.ValidatorSet, proposer common.Address, round uint64) istanbul.Validator {
+func roundRobinProposer(valSet istanbul.ValidatorSet, proposer libcommon.Address, round uint64) istanbul.Validator {
 	if valSet.Size() == 0 {
 		return nil
 	}
@@ -149,7 +149,7 @@ func roundRobinProposer(valSet istanbul.ValidatorSet, proposer common.Address, r
 	return valSet.GetByIndex(pick)
 }
 
-func stickyProposer(valSet istanbul.ValidatorSet, proposer common.Address, round uint64) istanbul.Validator {
+func stickyProposer(valSet istanbul.ValidatorSet, proposer libcommon.Address, round uint64) istanbul.Validator {
 	if valSet.Size() == 0 {
 		return nil
 	}
@@ -163,7 +163,7 @@ func stickyProposer(valSet istanbul.ValidatorSet, proposer common.Address, round
 	return valSet.GetByIndex(pick)
 }
 
-func (valSet *defaultSet) AddValidator(address common.Address) bool {
+func (valSet *defaultSet) AddValidator(address libcommon.Address) bool {
 	valSet.validatorMu.Lock()
 	defer valSet.validatorMu.Unlock()
 	for _, v := range valSet.validators {
@@ -178,7 +178,7 @@ func (valSet *defaultSet) AddValidator(address common.Address) bool {
 	return true
 }
 
-func (valSet *defaultSet) RemoveValidator(address common.Address) bool {
+func (valSet *defaultSet) RemoveValidator(address libcommon.Address) bool {
 	valSet.validatorMu.Lock()
 	defer valSet.validatorMu.Unlock()
 
@@ -195,7 +195,7 @@ func (valSet *defaultSet) Copy() istanbul.ValidatorSet {
 	valSet.validatorMu.RLock()
 	defer valSet.validatorMu.RUnlock()
 
-	addresses := make([]common.Address, 0, len(valSet.validators))
+	addresses := make([]libcommon.Address, 0, len(valSet.validators))
 	for _, v := range valSet.validators {
 		addresses = append(addresses, v.Address())
 	}
