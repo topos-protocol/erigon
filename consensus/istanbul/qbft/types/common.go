@@ -3,14 +3,14 @@ package qbfttypes
 import (
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 )
 
 // Data that is common to all QBFT messages. Used for composition.
 type CommonPayload struct {
 	code      uint64
-	source    common.Address
+	source    libcommon.Address
 	Sequence  *big.Int
 	Round     *big.Int
 	signature []byte
@@ -20,11 +20,11 @@ func (m *CommonPayload) Code() uint64 {
 	return m.code
 }
 
-func (m *CommonPayload) Source() common.Address {
+func (m *CommonPayload) Source() libcommon.Address {
 	return m.source
 }
 
-func (m *CommonPayload) SetSource(address common.Address) {
+func (m *CommonPayload) SetSource(address libcommon.Address) {
 	m.source = address
 }
 

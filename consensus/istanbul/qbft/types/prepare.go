@@ -5,17 +5,17 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/rlp"
 )
 
 // A QBFT PREPARE message.
 type Prepare struct {
 	CommonPayload
-	Digest common.Hash
+	Digest libcommon.Hash
 }
 
-func NewPrepare(sequence *big.Int, round *big.Int, digest common.Hash) *Prepare {
+func NewPrepare(sequence *big.Int, round *big.Int, digest libcommon.Hash) *Prepare {
 	return &Prepare{
 		CommonPayload: CommonPayload{
 			code:     PrepareCode,
@@ -26,7 +26,7 @@ func NewPrepare(sequence *big.Int, round *big.Int, digest common.Hash) *Prepare 
 	}
 }
 
-func NewPrepareWithSigAndSource(sequence *big.Int, round *big.Int, digest common.Hash, signature []byte, source common.Address) *Prepare {
+func NewPrepareWithSigAndSource(sequence *big.Int, round *big.Int, digest libcommon.Hash, signature []byte, source libcommon.Address) *Prepare {
 	prepare := NewPrepare(sequence, round, digest)
 	prepare.signature = signature
 	prepare.source = source
@@ -62,7 +62,7 @@ func (p *Prepare) DecodeRLP(stream *rlp.Stream) error {
 		Payload struct {
 			Sequence *big.Int
 			Round    *big.Int
-			Digest   common.Hash
+			Digest   libcommon.Hash
 		}
 		Signature []byte
 	}

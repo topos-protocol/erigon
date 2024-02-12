@@ -1,7 +1,7 @@
 package qbfttypes
 
 import (
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 )
 
@@ -27,8 +27,8 @@ func MessageCodes() map[uint64]struct{} {
 type QBFTMessage interface {
 	Code() uint64
 	View() istanbul.View
-	Source() common.Address
-	SetSource(address common.Address)
+	Source() libcommon.Address
+	SetSource(address libcommon.Address)
 	EncodePayloadForSigning() ([]byte, error)
 	Signature() []byte
 	SetSignature(signature []byte)

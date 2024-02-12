@@ -4,18 +4,18 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/ledgerwatch/erigon/common"
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/rlp"
 )
 
 // A QBFT COMMIT message.
 type Commit struct {
 	CommonPayload
-	Digest     common.Hash
+	Digest     libcommon.Hash
 	CommitSeal []byte
 }
 
-func NewCommit(sequence *big.Int, round *big.Int, digest common.Hash, seal []byte) *Commit {
+func NewCommit(sequence *big.Int, round *big.Int, digest libcommon.Hash, seal []byte) *Commit {
 	return &Commit{
 		CommonPayload: CommonPayload{
 			code:     CommitCode,
@@ -46,7 +46,7 @@ func (m *Commit) DecodeRLP(stream *rlp.Stream) error {
 		Payload struct {
 			Sequence   *big.Int
 			Round      *big.Int
-			Digest     common.Hash
+			Digest     libcommon.Hash
 			CommitSeal []byte
 		}
 		Signature []byte
