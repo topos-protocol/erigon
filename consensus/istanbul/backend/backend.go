@@ -37,7 +37,6 @@ import (
 	"github.com/ledgerwatch/erigon/core"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
-	"github.com/ledgerwatch/erigon/ethdb"
 	"github.com/ledgerwatch/erigon/event"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -96,7 +95,7 @@ type Backend struct {
 
 	chain        consensus.ChainHeaderReader
 	currentBlock func() *types.Block
-	hasBadBlock  func(db ethdb.Reader, hash libcommon.Hash) bool
+	hasBadBlock  func(db kv.RwDB, hash libcommon.Hash) bool
 
 	// the channels for istanbul engine notifications
 	commitCh          chan *types.Block
