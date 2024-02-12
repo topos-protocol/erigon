@@ -1193,6 +1193,22 @@ func CopyHeader(h *Header) *Header {
 	return &cpy
 }
 
+// QBFTHashWithRoundNumber gets the hash of the Header with Only commit seal set to its null value
+func (h *Header) QBFTHashWithRoundNumber(round uint32) libcommon.Hash {
+	return rlpHash(QBFTFilteredHeaderWithRound(h, round))
+}
+
+// EmptyBody returns true if there is no additional 'body' to complete the header
+// that is: no transactions and no uncles.
+func (h *Header) EmptyBody() bool {
+	return h.TxHash == EmptyRootHash && h.UncleHash == EmptyUncleHash
+}
+
+// EmptyReceipts returns true if there are no receipts for this header/block.
+func (h *Header) EmptyReceipts() bool {
+	return h.ReceiptHash == EmptyRootHash
+}
+
 // DecodeRLP decodes the Ethereum
 func (bb *Block) DecodeRLP(s *rlp.Stream) error {
 	size, err := s.List()
