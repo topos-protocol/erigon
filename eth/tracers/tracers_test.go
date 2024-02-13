@@ -20,9 +20,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/json"
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"math/big"
 	"testing"
+
+	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/core"
@@ -129,6 +130,109 @@ func TestPrestateTracerCreate2(t *testing.T) {
 		t.Fatalf("failed to unmarshal trace result: %v", err)
 	}
 	if _, has := ret["0x60f3f640a8508fc6a86d45df051962668e1e8ac7"]; !has {
+		t.Fatalf("Expected 0x60f3f640a8508fc6a86d45df051962668e1e8ac7 in result")
+	}
+}
+
+func TestZeroTracer(t *testing.T) {
+	unsignedTx := types.NewTransaction(1, libcommon.HexToAddress("0x00000000000000000000000000000000deadbeef"),
+		uint256.NewInt(0), 5000000, uint256.NewInt(1), []byte{})
+
+	privateKeyECDSA, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("err %v", err)
+	}
+	signer := types.LatestSignerForChainID(big.NewInt(1))
+	txn, err := types.SignTx(unsignedTx, *signer, privateKeyECDSA)
+	if err != nil {
+		t.Fatalf("err %v", err)
+	}
+
+	cumulativeGas := uint64(0)
+	origin, _ := signer.Sender(txn)
+	txContext := evmtypes.TxContext{
+		Origin:   origin,
+		GasPrice: uint256.NewInt(1),
+	}
+	excessBlobGas := uint64(50000)
+	context := evmtypes.BlockContext{
+		CanTransfer:   core.CanTransfer,
+		Transfer:      core.Transfer,
+		Coinbase:      libcommon.Address{},
+		BlockNumber:   8000000,
+		Time:          5,
+		Difficulty:    big.NewInt(0x30000),
+		GasLimit:      uint64(6000000),
+		ExcessBlobGas: &excessBlobGas,
+	}
+	context.BaseFee = uint256.NewInt(0)
+	alloc := types.GenesisAlloc{}
+
+	// The code pushes 'deadbeef' into memory, then the other params, and calls CREATE2, then returns
+	// the address
+	alloc[libcommon.HexToAddress("0x00000000000000000000000000000000deadbeef")] = types.GenesisAccount{
+		Nonce:   1,
+		Code:    hexutil.MustDecode("0x63deadbeef60005263cafebabe6004601c6000F560005260206000F3"),
+		Balance: big.NewInt(1),
+	}
+	alloc[origin] = types.GenesisAccount{
+		Nonce:   1,
+		Code:    []byte{},
+		Balance: big.NewInt(500000000000000),
+	}
+
+	m := mock.Mock(t)
+	tx, err := m.DB.BeginRw(m.Ctx)
+	require.NoError(t, err)
+	defer tx.Rollback()
+	rules := params.AllProtocolChanges.Rules(context.BlockNumber, context.Time)
+	statedb, _ := tests.MakePreState(rules, tx, alloc, context.BlockNumber)
+
+	// Create the tracer, the EVM environment and run it
+	tracerContext := &tracers.Context{
+		TxIndex:           0,
+		TxHash:            txn.Hash(),
+		Txn:               txn,
+		CumulativeGasUsed: &cumulativeGas,
+		BlockNum:          context.BlockNumber,
+	}
+
+	tracer, err := tracers.New("zeroTracer", tracerContext, json.RawMessage("{}"))
+	if err != nil {
+		t.Fatalf("failed to prestate tracer: %v", err)
+	}
+	evm := vm.NewEVM(context, txContext, statedb, params.AllProtocolChanges, vm.Config{Debug: true, Tracer: tracer})
+
+	msg, err := txn.AsMessage(*signer, nil, rules)
+	if err != nil {
+		t.Fatalf("failed to prepare transaction for tracing: %v", err)
+	}
+	st := core.NewStateTransition(evm, msg, new(core.GasPool).AddGas(txn.GetGas()).AddBlobGas(txn.GetBlobGas()))
+	if _, err = st.TransitionDb(false, false); err != nil {
+		t.Fatalf("failed to execute transaction: %v", err)
+	}
+	// Retrieve the trace result and compare against the etalon
+	res, err := tracer.GetResult()
+	if err != nil {
+		t.Fatalf("failed to retrieve trace result: %v", err)
+	}
+	ret := make(map[string]interface{})
+	if err := json.Unmarshal(res, &ret); err != nil {
+		t.Fatalf("failed to unmarshal trace result: %v", err)
+	}
+
+	if _, has := ret["traces"]; !has {
+		t.Fatalf("Expected type in result")
+	}
+
+	traces := ret["traces"].(map[string]interface{})
+
+	if len(traces) != 4 {
+		t.Fatalf("Expected 4 keys in traces")
+	}
+
+	// New created empty contract should appear in the traces
+	if _, has := traces["0x60f3f640a8508fc6a86d45df051962668e1e8ac7"]; !has {
 		t.Fatalf("Expected 0x60f3f640a8508fc6a86d45df051962668e1e8ac7 in result")
 	}
 }
