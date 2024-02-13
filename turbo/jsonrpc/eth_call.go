@@ -407,10 +407,10 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 }
 
 func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (hexutility.Bytes, error) {
-	return api.getWitness(ctx, api.db, blockNrOrHash, api.logger)
+	return api.getWitness(ctx, api.db, blockNrOrHash, api.MaxGetProofRewindBlockCount, api.logger)
 }
 
-func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, logger log.Logger) (hexutility.Bytes, error) {
+func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, maxGetProofRewindBlockCount int, logger log.Logger) (hexutility.Bytes, error) {
 	tx, err := db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -464,6 +464,11 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 
 	rl := trie.NewRetainList(0)
 
+	regenerate_hash := false
+	if latestBlock-blockNr > uint64(maxGetProofRewindBlockCount) {
+		regenerate_hash = true
+	}
+
 	if blockNr-1 < latestBlock {
 		batch := membatchwithdb.NewMemoryBatch(tx, api.dirs.Tmp, logger)
 		defer batch.Rollback()
@@ -476,11 +481,17 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 			return nil, err
 		}
 
-		interHashStageCfg := stagedsync.StageTrieCfg(nil, false, false, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(batch), api._agg)
-		err = stagedsync.UnwindIntermediateHashes("eth_getWitness", rl, unwindState, stageState, batch, interHashStageCfg, ctx.Done(), logger)
-		if err != nil {
-			return nil, err
+		if !regenerate_hash {
+			interHashStageCfg := stagedsync.StageTrieCfg(nil, false, false, false, api.dirs.Tmp, api._blockReader, nil, api.historyV3(batch), api._agg)
+			err = stagedsync.UnwindIntermediateHashes("eth_getWitness", rl, unwindState, stageState, batch, interHashStageCfg, ctx.Done(), logger)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			_ = batch.ClearBucket(kv.TrieOfAccounts)
+			_ = batch.ClearBucket(kv.TrieOfStorage)
 		}
+
 		tx = batch
 	}
 
@@ -504,16 +515,6 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 	trieStateWriter := tds.TrieStateWriter()
 
 	statedb := state.New(tds)
-
-	// var slotV uint256.Int
-	// var slotV2 uint256.Int
-	// slot := libcommon.HexToHash("0xe0ab2193e40c80a14d05812b70d9e17b2722b1b15a9a2b7ce4860cd58844cdea")
-	// slot2 := libcommon.HexToHash("0xabd7b398c2237712843e3e780dcd40dfb99446b30666f04c025da4efa5ce5177")
-	// statedb.GetState(libcommon.HexToAddress("0xec59ea1acb9fc9f630b2dce73790ed8be0ac036e"), &slot, &slotV)
-	// statedb.GetState(libcommon.HexToAddress("0xec59ea1acb9fc9f630b2dce73790ed8be0ac036e"), &slot2, &slotV2)
-
-	// fmt.Printf("slot %x %x\n", slot, slotV)
-	// fmt.Printf("slot %x %x\n", slot2, slotV2)
 
 	getHeader := func(hash libcommon.Hash, number uint64) *types.Header {
 		h, e := api._blockReader.Header(ctx, tx, hash, number)
@@ -578,7 +579,12 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		pr := trie.NewMultiAccountProofRetainer(rl)
 		pr.AccHexKeys = accountNibbles
 		receiver.SetProofRetainer(pr)
-		subTrieloader := trie.NewFlatDBTrieLoader[trie.SubTries]("eth_getWitness", rl, nil, nil, false, receiver)
+
+		loaderRl := rl
+		if regenerate_hash {
+			loaderRl = trie.NewRetainList(0)
+		}
+		subTrieloader := trie.NewFlatDBTrieLoader[trie.SubTries]("eth_getWitness", loaderRl, nil, nil, false, receiver)
 		subTries, err := subTrieloader.Result(tx, nil)
 
 		rl.Rewind()

@@ -231,7 +231,7 @@ func (api *PrivateDebugAPIImpl) traceBlock(ctx context.Context, blockNrOrHash rp
 
 		// If not found, compute witness directly
 		if len(witness_bytes) == 0 || err != nil {
-			witness_bytes, err = api.getWitness(ctx, api.db, blockNrOrHash, log.Root())
+			witness_bytes, err = api.getWitness(ctx, api.db, blockNrOrHash, 100000, log.Root())
 		}
 
 		if err != nil {
