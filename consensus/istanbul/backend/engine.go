@@ -17,6 +17,7 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -328,8 +329,14 @@ func (sb *Backend) snapLogger(snap *Snapshot) log.Logger {
 func (sb *Backend) storeSnap(snap *Snapshot) error {
 	logger := sb.snapLogger(snap)
 	logger.Debug("BFT: store snapshot to database")
-	if err := snap.store(sb.db); err != nil {
-		logger.Error("BFT: failed to store snapshot to database", "err", err)
+
+	if err := sb.db.Update(context.Background(), func(s kv.RwTx) error {
+		if err := snap.store(s); err != nil {
+			logger.Error("BFT: failed to store snapshot to database", "err", err)
+			return err
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -352,9 +359,15 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 		}
 		// If an on-disk checkpoint snapshot can be found, use that
 		if number%checkpointInterval == 0 {
-			if s, err := loadSnapshot(sb.config.GetConfig(new(big.Int).SetUint64(number)).Epoch, sb.db, hash); err == nil {
-				snap = s
-				sb.snapLogger(snap).Trace("BFT: loaded voting snapshot from database")
+			if err := sb.db.View(context.Background(), func(s kv.Tx) error {
+				if s, err := loadSnapshot(sb.config.GetConfig(new(big.Int).SetUint64(number)).Epoch, s, hash); err == nil {
+					snap = s
+					sb.snapLogger(snap).Trace("BFT: loaded voting snapshot from database")
+					return nil
+				} else {
+					return err
+				}
+			}); err == nil {
 				break
 			}
 		}

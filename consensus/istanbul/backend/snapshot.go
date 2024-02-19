@@ -72,8 +72,8 @@ func newSnapshot(epoch uint64, number uint64, hash libcommon.Hash, valSet istanb
 }
 
 // loadSnapshot loads an existing snapshot from the database.
-func loadSnapshot(epoch uint64, db kv.RwDB, hash libcommon.Hash) (*Snapshot, error) {
-	blob, err := db.Get(append([]byte(dbKeySnapshotPrefix), hash[:]...))
+func loadSnapshot(epoch uint64, db kv.Getter, hash libcommon.Hash) (*Snapshot, error) {
+	blob, err := db.GetOne("snapshot", append([]byte(dbKeySnapshotPrefix), hash[:]...))
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +87,12 @@ func loadSnapshot(epoch uint64, db kv.RwDB, hash libcommon.Hash) (*Snapshot, err
 }
 
 // store inserts the snapshot into the database.
-func (s *Snapshot) store(db kv.RwDB) error {
+func (s *Snapshot) store(db kv.Putter) error {
 	blob, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
-	return db.Put(append([]byte(dbKeySnapshotPrefix), s.Hash[:]...), blob)
+	return db.Put("snapshot", append([]byte(dbKeySnapshotPrefix), s.Hash[:]...), blob)
 }
 
 // copy creates a deep copy of the snapshot, though not the individual votes.
