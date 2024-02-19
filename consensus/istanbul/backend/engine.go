@@ -34,7 +34,6 @@ import (
 	"github.com/ledgerwatch/erigon/consensus/istanbul/validator"
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
-	"github.com/ledgerwatch/erigon/params"
 	"github.com/ledgerwatch/erigon/rpc"
 	"github.com/ledgerwatch/log/v3"
 )
@@ -382,7 +381,7 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 
 			var validators []libcommon.Address
 			validatorContract := sb.config.GetValidatorContractAddress(big.NewInt(0))
-			if validatorContract != (libcommon.Address{}) && sb.config.GetValidatorSelectionMode(big.NewInt(0)) == params.ContractMode {
+			if validatorContract != (libcommon.Address{}) && sb.config.GetValidatorSelectionMode(big.NewInt(0)) == libchain.ContractMode {
 				validatorContractCaller, err := contract.NewValidatorContractInterfaceCaller(validatorContract, sb.config.Client)
 
 				if err != nil {
@@ -478,7 +477,7 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 		sb.logger.Trace("Fetched validators from smart contract", "validators", validators)
 		valSet := validator.NewSet(validators, sb.config.ProposerPolicy)
 		snap.ValSet = valSet
-	} else if validatorsFromTransitions := sb.config.GetValidatorsAt(targetBlockHeight); len(validatorsFromTransitions) > 0 && sb.config.GetValidatorSelectionMode(targetBlockHeight) == params.BlockHeaderMode {
+	} else if validatorsFromTransitions := sb.config.GetValidatorsAt(targetBlockHeight); len(validatorsFromTransitions) > 0 && sb.config.GetValidatorSelectionMode(targetBlockHeight) == libchain.BlockHeaderMode {
 		//Note! we only want to set this once at this block height. Subsequent blocks will be propagated with the same
 		// 		validator as they are copied into the block header on the next block. Then normal voting can take place
 		// 		again.
