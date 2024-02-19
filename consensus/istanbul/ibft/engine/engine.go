@@ -391,8 +391,18 @@ func (e *Engine) SealHash(header *types.Header) common.Hash {
 	return sigHash(header)
 }
 
-func (e *Engine) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int {
+// func (e *Engine) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int {
+// 	return new(big.Int)
+// }
+
+func (e *Engine) CalcDifficulty(chain consensus.ChainHeaderReader, time, parentTime uint64, parentDifficulty *big.Int, parentNumber uint64,
+	parentHash, parentUncleHash libcommon.Hash, parentAuRaStep uint64) *big.Int {
 	return new(big.Int)
+}
+
+func (c *Engine) CalculateRewards(config *libchain.Config, header *types.Header, uncles []*types.Header, syscall consensus.SystemCall,
+) ([]consensus.Reward, error) {
+	return []consensus.Reward{}, nil
 }
 
 func (e *Engine) ExtractGenesisValidators(header *types.Header) ([]libcommon.Address, error) {

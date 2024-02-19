@@ -4,6 +4,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/core/state"
@@ -25,7 +26,10 @@ type Engine interface {
 	FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error)
 	Seal(chain consensus.ChainHeaderReader, block *types.Block, validators ValidatorSet) (*types.Block, error)
 	SealHash(header *types.Header) libcommon.Hash
-	CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int
+	// CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int
+	CalcDifficulty(chain consensus.ChainHeaderReader, time, parentTime uint64, parentDifficulty *big.Int, parentNumber uint64,
+		parentHash, parentUncleHash libcommon.Hash, parentAuRaStep uint64) *big.Int
+	CalculateRewards(config *chain.Config, header *types.Header, uncles []*types.Header, syscall consensus.SystemCall) ([]consensus.Reward, error)
 	WriteVote(header *types.Header, candidate libcommon.Address, authorize bool) error
 	ReadVote(header *types.Header) (candidate libcommon.Address, authorize bool, err error)
 }

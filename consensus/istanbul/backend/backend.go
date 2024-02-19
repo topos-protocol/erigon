@@ -23,6 +23,7 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -136,8 +137,18 @@ func (sb *Backend) EngineForBlockNumber(blockNumber *big.Int) istanbul.Engine {
 }
 
 // zekun: HACK
-func (sb *Backend) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int {
-	return sb.EngineForBlockNumber(parent.Number).CalcDifficulty(chain, time, parent)
+// func (sb *Backend) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int {
+// 	return sb.EngineForBlockNumber(parent.Number).CalcDifficulty(chain, time, parent)
+// }
+
+func (sb *Backend) CalcDifficulty(chain consensus.ChainHeaderReader, time, parentTime uint64, parentDifficulty *big.Int, parentNumber uint64,
+	parentHash, parentUncleHash libcommon.Hash, parentAuRaStep uint64) *big.Int {
+	return new(big.Int)
+}
+
+func (sb *Backend) CalculateRewards(config *chain.Config, header *types.Header, uncles []*types.Header, syscall consensus.SystemCall,
+) ([]consensus.Reward, error) {
+	return []consensus.Reward{}, nil
 }
 
 // Address implements istanbul.Backend.Address
