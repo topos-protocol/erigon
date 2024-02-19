@@ -2,9 +2,11 @@ package ibftengine
 
 import (
 	"bytes"
+
 	"math/big"
 	"time"
 
+	"github.com/ledgerwatch/erigon-lib/chain"
 	libchain "github.com/ledgerwatch/erigon-lib/chain"
 	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
@@ -17,6 +19,7 @@ import (
 	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/rlp"
+	"github.com/ledgerwatch/log/v3"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -305,28 +308,60 @@ func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 //
 // Note, the block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
-func (e *Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header) {
+// func (e *Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header) {
+// 	// No block rewards in Istanbul, so the state remains as is and uncles are dropped
+// 	// TODO Check if we need to update the state
+// 	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+// 	header.UncleHash = nilUncleHash
+// }
+
+func (e *Engine) Finalize(config *chain.Config, header *types.Header, state *state.IntraBlockState,
+	txs types.Transactions, uncles []*types.Header, r types.Receipts, withdrawals []*types.Withdrawal,
+	chain consensus.ChainReader, syscall consensus.SystemCall, logger log.Logger,
+) (types.Transactions, types.Receipts, error) {
 	// No block rewards in Istanbul, so the state remains as is and uncles are dropped
 	// TODO Check if we need to update the state
 	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = nilUncleHash
+	return txs, r, nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
 // nor block rewards given, and returns the final block.
-func (e *Engine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+// func (e *Engine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+// 	/// No block rewards in Istanbul, so the state remains as is and uncles are dropped
+// 	// TODO Check if we need to update the state
+// 	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+// 	header.UncleHash = nilUncleHash
+
+// 	var transactions []types.Transaction = make([]types.Transaction, len(txs))
+// 	for i, tx := range txs {
+// 		transactions[i] = *tx
+// 	}
+// 	// Assemble and return the final block for sealing
+// 	// return types.NewBlock(header, txs, nil, receipts, new(trie.Trie)), nil
+// 	return types.NewBlock(header, transactions, nil, receipts, nil /*withdrawals*/), nil
+// }
+
+func (e *Engine) FinalizeAndAssemble(chainConfig *chain.Config, header *types.Header, state *state.IntraBlockState,
+	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
+	chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger,
+) (*types.Block, types.Transactions, types.Receipts, error) {
+
 	/// No block rewards in Istanbul, so the state remains as is and uncles are dropped
 	// TODO Check if we need to update the state
 	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = nilUncleHash
+	return types.NewBlock(header, txs, nil, receipts, nil), txs, receipts, nil
+}
 
-	var transactions []types.Transaction = make([]types.Transaction, len(txs))
-	for i, tx := range txs {
-		transactions[i] = *tx
-	}
-	// Assemble and return the final block for sealing
-	// return types.NewBlock(header, txs, nil, receipts, new(trie.Trie)), nil
-	return types.NewBlock(header, transactions, nil, receipts, nil /*withdrawals*/), nil
+func (c *Engine) GenerateSeal(chain consensus.ChainHeaderReader, currnt, parent *types.Header, call consensus.Call) []byte {
+	return nil
+}
+
+func (c *Engine) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
+	state *state.IntraBlockState, syscall consensus.SysCallCustom, logger log.Logger) {
+	logger.Info(">>>>>>>>> IBFT Initialize <<<<<<<<<<<<<<<")
 }
 
 // Seal generates a new block for the given input block with the local miner's

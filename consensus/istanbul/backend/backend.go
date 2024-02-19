@@ -36,6 +36,7 @@ import (
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/consensus/istanbul/validator"
 	"github.com/ledgerwatch/erigon/core"
+	"github.com/ledgerwatch/erigon/core/state"
 	"github.com/ledgerwatch/erigon/core/types"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/event"
@@ -149,6 +150,11 @@ func (sb *Backend) CalcDifficulty(chain consensus.ChainHeaderReader, time, paren
 func (sb *Backend) CalculateRewards(config *chain.Config, header *types.Header, uncles []*types.Header, syscall consensus.SystemCall,
 ) ([]consensus.Reward, error) {
 	return []consensus.Reward{}, nil
+}
+
+func (sb *Backend) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
+	state *state.IntraBlockState, syscall consensus.SysCallCustom, logger log.Logger) {
+	sb.EngineForBlockNumber(header.Number).Initialize(config, chain, header, state, syscall, logger)
 }
 
 // Address implements istanbul.Backend.Address

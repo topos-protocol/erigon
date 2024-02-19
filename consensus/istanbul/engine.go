@@ -4,6 +4,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/ledgerwatch/log/v3"
+
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/consensus"
@@ -22,8 +24,17 @@ type Engine interface {
 	VerifyUncles(chain consensus.ChainReader, block *types.Block) error
 	VerifySeal(chain consensus.ChainHeaderReader, header *types.Header, validators ValidatorSet) error
 	Prepare(chain consensus.ChainHeaderReader, header *types.Header, validators ValidatorSet) error
-	Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header)
-	FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error)
+	// Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState,
+	// txs []*types.Transaction, uncles []*types.Header)
+	Finalize(config *chain.Config, header *types.Header, state *state.IntraBlockState,
+		txs types.Transactions, uncles []*types.Header, r types.Receipts, withdrawals []*types.Withdrawal,
+		chain consensus.ChainReader, syscall consensus.SystemCall, logger log.Logger,
+	) (types.Transactions, types.Receipts, error)
+	// FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error)
+	FinalizeAndAssemble(chainConfig *chain.Config, header *types.Header, state *state.IntraBlockState,
+		txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
+		chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger,
+	) (*types.Block, types.Transactions, types.Receipts, error)
 	Seal(chain consensus.ChainHeaderReader, block *types.Block, validators ValidatorSet) (*types.Block, error)
 	SealHash(header *types.Header) libcommon.Hash
 	// CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, parent *types.Header) *big.Int
@@ -32,4 +43,7 @@ type Engine interface {
 	CalculateRewards(config *chain.Config, header *types.Header, uncles []*types.Header, syscall consensus.SystemCall) ([]consensus.Reward, error)
 	WriteVote(header *types.Header, candidate libcommon.Address, authorize bool) error
 	ReadVote(header *types.Header) (candidate libcommon.Address, authorize bool, err error)
+	GenerateSeal(chain consensus.ChainHeaderReader, currnt, parent *types.Header, call consensus.Call) []byte
+	Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
+		state *state.IntraBlockState, syscall consensus.SysCallCustom, logger log.Logger)
 }

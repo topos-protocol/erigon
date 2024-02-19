@@ -380,23 +380,51 @@ func WriteValidators(validators []libcommon.Address) ApplyQBFTExtra {
 //
 // Note, the block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
-func (e *Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header) {
+// func (e *Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header) {
+// 	// Accumulate any block and uncle rewards and commit the final state root
+// 	e.accumulateRewards(chain, state, header)
+// 	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+// 	header.UncleHash = nilUncleHash
+// }
+
+func (e *Engine) Finalize(config *chain.Config, header *types.Header, state *state.IntraBlockState,
+	txs types.Transactions, uncles []*types.Header, r types.Receipts, withdrawals []*types.Withdrawal,
+	chain consensus.ChainReader, syscall consensus.SystemCall, logger log.Logger,
+) (types.Transactions, types.Receipts, error) {
 	// Accumulate any block and uncle rewards and commit the final state root
 	e.accumulateRewards(chain, state, header)
 	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = nilUncleHash
+	return txs, r, nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
 // nor block rewards given, and returns the final block.
-func (e *Engine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	e.Finalize(chain, header, state, txs, uncles)
-	var transactions []types.Transaction = make([]types.Transaction, len(txs))
-	for i, tx := range txs {
-		transactions[i] = *tx
-	}
+// func (e *Engine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+// 	e.Finalize(chain, header, state, txs, uncles)
+// 	var transactions []types.Transaction = make([]types.Transaction, len(txs))
+// 	for i, tx := range txs {
+// 		transactions[i] = *tx
+// 	}
+// 	// Assemble and return the final block for sealing
+// 	return types.NewBlock(header, transactions, nil, receipts, nil), nil
+// }
+
+func (e *Engine) FinalizeAndAssemble(chainConfig *chain.Config, header *types.Header, state *state.IntraBlockState,
+	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
+	chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger,
+) (*types.Block, types.Transactions, types.Receipts, error) {
+	e.Finalize(chainConfig, header, state, txs, uncles, receipts, withdrawals, chain, syscall, logger)
 	// Assemble and return the final block for sealing
-	return types.NewBlock(header, transactions, nil, receipts, nil), nil
+	return types.NewBlock(header, txs, nil, receipts, nil), txs, receipts, nil
+}
+
+func (c *Engine) GenerateSeal(chain consensus.ChainHeaderReader, currnt, parent *types.Header, call consensus.Call) []byte {
+	return nil
+}
+func (c *Engine) Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
+	state *state.IntraBlockState, syscall consensus.SysCallCustom, logger log.Logger) {
+	logger.Info(">>>>>>>>> QBFT Initialize <<<<<<<<<<<<<<<")
 }
 
 // Seal generates a new block for the given input block with the local miner's

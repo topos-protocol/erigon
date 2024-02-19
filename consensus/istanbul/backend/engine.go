@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/ledgerwatch/erigon-lib/chain"
 	libchain "github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
@@ -175,14 +176,34 @@ func (sb *Backend) Prepare(chain consensus.ChainHeaderReader, header *types.Head
 //
 // Note, the block header and state database might be updated to reflect any
 // consensus rules that happen at finalization (e.g. block rewards).
-func (sb *Backend) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header) {
-	sb.EngineForBlockNumber(header.Number).Finalize(chain, header, state, txs, uncles)
+// func (sb *Backend) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header) {
+// 	sb.EngineForBlockNumber(header.Number).Finalize(chain, header, state, txs, uncles)
+// }
+
+func (sb *Backend) Finalize(config *chain.Config, header *types.Header, state *state.IntraBlockState,
+	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
+	chain consensus.ChainReader, syscall consensus.SystemCall, logger log.Logger,
+) (types.Transactions, types.Receipts, error) {
+	return sb.EngineForBlockNumber(header.Number).Finalize(config, header, state, txs, uncles, receipts, withdrawals, chain, syscall, logger)
+
 }
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
 // nor block rewards given, and returns the final block.
-func (sb *Backend) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	return sb.EngineForBlockNumber(header.Number).FinalizeAndAssemble(chain, header, state, txs, uncles, receipts)
+// func (sb *Backend) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+// 	return sb.EngineForBlockNumber(header.Number).FinalizeAndAssemble(chain, header, state, txs, uncles, receipts)
+// }
+
+func (sb *Backend) FinalizeAndAssemble(chainConfig *chain.Config, header *types.Header, state *state.IntraBlockState,
+	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
+	chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger,
+) (*types.Block, types.Transactions, types.Receipts, error) {
+	return sb.EngineForBlockNumber(header.Number).FinalizeAndAssemble(chainConfig, header, state, txs, uncles, receipts, withdrawals, chain, syscall, call, logger)
+
+}
+
+func (sb *Backend) GenerateSeal(chain consensus.ChainHeaderReader, currnt, parent *types.Header, call consensus.Call) []byte {
+	return nil
 }
 
 // Seal generates a new block for the given input block with the local miner's
