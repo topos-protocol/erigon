@@ -3,8 +3,9 @@ package chain
 type ConsensusName string
 
 const (
-	AuRaConsensus   ConsensusName = "aura"
-	EtHashConsensus ConsensusName = "ethash"
-	CliqueConsensus ConsensusName = "clique"
-	BorConsensus    ConsensusName = "bor"
+	AuRaConsensus     ConsensusName = "aura"
+	EtHashConsensus   ConsensusName = "ethash"
+	CliqueConsensus   ConsensusName = "clique"
+	BorConsensus      ConsensusName = "bor"
+	IstanbulConsensus ConsensusName = "istanbul"
 )

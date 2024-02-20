@@ -22,6 +22,7 @@ import (
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulBackend "github.com/ledgerwatch/erigon/consensus/istanbul/backend"
 	"github.com/ledgerwatch/erigon/consensus/merge"
+	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/node"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
 	"github.com/ledgerwatch/erigon/params"
@@ -88,14 +89,24 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 		// If Istanbul is requested, set it up
 		if chainConfig.Istanbul != nil {
 			log.Warn("WARNING: The attribute config.istanbul is deprecated and will be removed in the future, please use config.ibft on genesis file")
-			if chainConfig.Istanbul.Epoch != 0 {
-				config.Istanbul.Epoch = chainConfig.Istanbul.Epoch
+			var err error
+			var db kv.RwDB
+			db, err = node.OpenDatabase(ctx, nodeConfig, kv.ConsensusDB, "istanbul", readonly, logger)
+			if err != nil {
+				panic(err)
 			}
-			config.Istanbul.ProposerPolicy = istanbul.NewProposerPolicy(consensus.ProposerPolicyId(chainConfig.Istanbul.ProposerPolicy))
-			config.Istanbul.Ceil2Nby3Block = chainConfig.Istanbul.Ceil2Nby3Block
-			config.Istanbul.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
-			config.Istanbul.TestQBFTBlock = chainConfig.Istanbul.TestQBFTBlock
-			return istanbulBackend.New(&config.Istanbul, stack.GetNodeKey(), db)
+
+			var config istanbul.Config
+			if chainConfig.Istanbul.Epoch != 0 {
+				config.Epoch = chainConfig.Istanbul.Epoch
+			}
+			config.ProposerPolicy = consensus.NewProposerPolicy(consensus.ProposerPolicyId(chainConfig.Istanbul.ProposerPolicy))
+			config.Ceil2Nby3Block = chainConfig.Istanbul.Ceil2Nby3Block
+			// config.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
+			config.TestQBFTBlock = chainConfig.Istanbul.TestQBFTBlock
+			log.Info(">>>>>>>>> IBFT random generated  key <<<<<<<<<<<<<<<")
+			nodeKey, _ := crypto.GenerateKey()
+			return istanbulBackend.New(&config, nodeKey, db)
 		}
 	case *chain.AuRaConfig:
 		if chainConfig.Aura != nil {

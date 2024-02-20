@@ -238,10 +238,17 @@ func (e *Engine) verifyCommittedSeals(chain consensus.ChainHeaderReader, header 
 	return nil
 }
 
-// VerifyUncles verifies that the given block's uncles conform to the consensus
-// rules of a given engine.
-func (e *Engine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
-	if len(block.Uncles()) > 0 {
+// // VerifyUncles verifies that the given block's uncles conform to the consensus
+// // rules of a given engine.
+// func (e *Engine) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+// 	if len(block.Uncles()) > 0 {
+// 		return istanbulcommon.ErrInvalidUncleHash
+// 	}
+// 	return nil
+// }
+
+func (e *Engine) VerifyUncles(chain consensus.ChainReader, header *types.Header, uncles []*types.Header) error {
+	if len(uncles) > 0 {
 		return istanbulcommon.ErrInvalidUncleHash
 	}
 	return nil
@@ -366,6 +373,11 @@ func (c *Engine) Initialize(config *chain.Config, chain consensus.ChainHeaderRea
 
 func (c *Engine) IsServiceTransaction(sender libcommon.Address, syscall consensus.SystemCall) bool {
 	return false
+}
+
+// Type returns underlying consensus engine
+func (c *Engine) Type() chain.ConsensusName {
+	return chain.IstanbulConsensus
 }
 
 // Seal generates a new block for the given input block with the local miner's

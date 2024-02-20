@@ -21,7 +21,8 @@ type Engine interface {
 	CommitHeader(header *types.Header, seals [][]byte, round *big.Int) error
 	VerifyBlockProposal(chain consensus.ChainHeaderReader, block *types.Block, validators consensus.ValidatorSet) (time.Duration, error)
 	VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header, parents []*types.Header, validators consensus.ValidatorSet) error
-	VerifyUncles(chain consensus.ChainReader, block *types.Block) error
+	// VerifyUncles(chain consensus.ChainReader, block *types.Block) error
+	VerifyUncles(chain consensus.ChainReader, header *types.Header, uncles []*types.Header) error
 	VerifySeal(chain consensus.ChainHeaderReader, header *types.Header, validators consensus.ValidatorSet) error
 	Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, validators consensus.ValidatorSet) error
 	// Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState,
@@ -47,4 +48,6 @@ type Engine interface {
 	Initialize(config *chain.Config, chain consensus.ChainHeaderReader, header *types.Header,
 		state *state.IntraBlockState, syscall consensus.SysCallCustom, logger log.Logger)
 	IsServiceTransaction(sender libcommon.Address, syscall consensus.SystemCall) bool
+	// Type returns underlying consensus engine
+	Type() chain.ConsensusName
 }
