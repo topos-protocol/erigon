@@ -45,7 +45,7 @@ func (c *core) sendPreprepare(request *istanbul.Request) {
 	}
 }
 
-func (c *core) handlePreprepare(msg *ibfttypes.Message, src istanbul.Validator) error {
+func (c *core) handlePreprepare(msg *ibfttypes.Message, src consensus.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 
 	// Decode PRE-PREPARE

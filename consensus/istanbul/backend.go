@@ -21,6 +21,7 @@ import (
 	"time"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/event"
 )
 
@@ -30,16 +31,16 @@ type Backend interface {
 	Address() libcommon.Address
 
 	// Validators returns the validator set
-	Validators(proposal Proposal) ValidatorSet
+	Validators(proposal Proposal) consensus.ValidatorSet
 
 	// EventMux returns the event mux in backend
 	EventMux() *event.TypeMux
 
 	// Broadcast sends a message to all validators (include self)
-	Broadcast(valSet ValidatorSet, code uint64, payload []byte) error
+	Broadcast(valSet consensus.ValidatorSet, code uint64, payload []byte) error
 
 	// Gossip sends a message to all validators (exclude self)
-	Gossip(valSet ValidatorSet, code uint64, payload []byte) error
+	Gossip(valSet consensus.ValidatorSet, code uint64, payload []byte) error
 
 	// Commit delivers an approved proposal to backend.
 	// The delivered proposal will be put into blockchain.
@@ -69,7 +70,7 @@ type Backend interface {
 	GetProposer(number uint64) libcommon.Address
 
 	// ParentValidators returns the validator set of the given proposal's parent block
-	ParentValidators(proposal Proposal) ValidatorSet
+	ParentValidators(proposal Proposal) consensus.ValidatorSet
 
 	// HasBadProposal returns whether the block with the hash is a bad block
 	HasBadProposal(hash libcommon.Hash) bool

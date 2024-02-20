@@ -17,6 +17,7 @@
 package core
 
 import (
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
@@ -77,7 +78,7 @@ func (c *core) checkMessage(msgCode uint64, view *istanbul.View) error {
 	return nil
 }
 
-func (c *core) storeBacklog(msg *ibfttypes.Message, src istanbul.Validator) {
+func (c *core) storeBacklog(msg *ibfttypes.Message, src consensus.Validator) {
 	logger := c.logger.New("from", src, "state", c.state)
 
 	if src.Address() == c.Address() {

@@ -23,12 +23,13 @@ import (
 	"sync"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
 )
 
 // Construct a new message set to accumulate messages for given sequence/view number.
-func newMessageSet(valSet istanbul.ValidatorSet) *messageSet {
+func newMessageSet(valSet consensus.ValidatorSet) *messageSet {
 	return &messageSet{
 		view: &istanbul.View{
 			Round:    new(big.Int),
@@ -44,7 +45,7 @@ func newMessageSet(valSet istanbul.ValidatorSet) *messageSet {
 
 type messageSet struct {
 	view       *istanbul.View
-	valSet     istanbul.ValidatorSet
+	valSet     consensus.ValidatorSet
 	messagesMu *sync.Mutex
 	messages   map[libcommon.Address]*ibfttypes.Message
 }

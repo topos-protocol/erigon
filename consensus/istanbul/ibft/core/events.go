@@ -17,12 +17,12 @@
 package core
 
 import (
-	"github.com/ledgerwatch/erigon/consensus/istanbul"
+	"github.com/ledgerwatch/erigon/consensus"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
 )
 
 type backlogEvent struct {
-	src istanbul.Validator
+	src consensus.Validator
 	msg *ibfttypes.Message
 }
 

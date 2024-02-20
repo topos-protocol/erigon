@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
 	"github.com/ledgerwatch/erigon/consensus/istanbul/validator"
@@ -39,7 +40,7 @@ type testSystemBackend struct {
 	sys *testSystem
 
 	engine *core
-	peers  istanbul.ValidatorSet
+	peers  consensus.ValidatorSet
 	events *event.TypeMux
 
 	committedMsgs []testCommittedMsgs
@@ -63,7 +64,7 @@ func (self *testSystemBackend) Address() common.Address {
 }
 
 // Peers returns all connected peers
-func (self *testSystemBackend) Validators(proposal istanbul.Proposal) istanbul.ValidatorSet {
+func (self *testSystemBackend) Validators(proposal istanbul.Proposal) consensus.ValidatorSet {
 	return self.peers
 }
 
@@ -81,7 +82,7 @@ func (self *testSystemBackend) Send(message []byte, code uint64, target common.A
 	return nil
 }
 
-func (self *testSystemBackend) Broadcast(valSet istanbul.ValidatorSet, code uint64, message []byte) error {
+func (self *testSystemBackend) Broadcast(valSet consensus.ValidatorSet, code uint64, message []byte) error {
 	testLogger.Info("enqueuing a message...", "address", self.Address())
 	self.sentMsgs = append(self.sentMsgs, message)
 	self.sys.queuedMessage <- istanbul.MessageEvent{
@@ -91,7 +92,7 @@ func (self *testSystemBackend) Broadcast(valSet istanbul.ValidatorSet, code uint
 	return nil
 }
 
-func (self *testSystemBackend) Gossip(valSet istanbul.ValidatorSet, code uint64, message []byte) error {
+func (self *testSystemBackend) Gossip(valSet consensus.ValidatorSet, code uint64, message []byte) error {
 	testLogger.Warn("not sign any data")
 	return nil
 }
@@ -161,7 +162,7 @@ func (self *testSystemBackend) GetProposer(number uint64) common.Address {
 	return common.Address{}
 }
 
-func (self *testSystemBackend) ParentValidators(proposal istanbul.Proposal) istanbul.ValidatorSet {
+func (self *testSystemBackend) ParentValidators(proposal istanbul.Proposal) consensus.ValidatorSet {
 	return self.peers
 }
 
@@ -207,7 +208,7 @@ func generateValidators(n int) []common.Address {
 	return vals
 }
 
-func newTestValidatorSet(n int) istanbul.ValidatorSet {
+func newTestValidatorSet(n int) consensus.ValidatorSet {
 	return validator.NewSet(generateValidators(n), istanbul.NewRoundRobinProposerPolicy())
 }
 

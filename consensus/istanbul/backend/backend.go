@@ -127,14 +127,15 @@ func (sb *Backend) Engine() istanbul.Engine {
 }
 
 func (sb *Backend) EngineForBlockNumber(blockNumber *big.Int) istanbul.Engine {
-	switch {
-	case blockNumber != nil && sb.IsQBFTConsensusAt(blockNumber):
-		return sb.qbftEngine
-	case blockNumber == nil && sb.IsQBFTConsensus():
-		return sb.qbftEngine
-	default:
-		return sb.ibftEngine
-	}
+	// switch {
+	// case blockNumber != nil && sb.IsQBFTConsensusAt(blockNumber):
+	// 	return sb.qbftEngine
+	// case blockNumber == nil && sb.IsQBFTConsensus():
+	// 	return sb.qbftEngine
+	// default:
+	// 	return sb.ibftEngine
+	// }
+	return sb.ibftEngine
 }
 
 // zekun: HACK
@@ -157,18 +158,22 @@ func (sb *Backend) Initialize(config *chain.Config, chain consensus.ChainHeaderR
 	sb.EngineForBlockNumber(header.Number).Initialize(config, chain, header, state, syscall, logger)
 }
 
+func (sb *Backend) IsServiceTransaction(sender libcommon.Address, syscall consensus.SystemCall) bool {
+	return false
+}
+
 // Address implements istanbul.Backend.Address
 func (sb *Backend) Address() libcommon.Address {
 	return sb.Engine().Address()
 }
 
 // Validators implements istanbul.Backend.Validators
-func (sb *Backend) Validators(proposal istanbul.Proposal) istanbul.ValidatorSet {
+func (sb *Backend) Validators(proposal istanbul.Proposal) consensus.ValidatorSet {
 	return sb.getValidators(proposal.Number().Uint64(), proposal.Hash())
 }
 
 // Broadcast implements istanbul.Backend.Broadcast
-func (sb *Backend) Broadcast(valSet istanbul.ValidatorSet, code uint64, payload []byte) error {
+func (sb *Backend) Broadcast(valSet consensus.ValidatorSet, code uint64, payload []byte) error {
 	// send to others
 	sb.Gossip(valSet, code, payload)
 	// send to self
@@ -181,7 +186,7 @@ func (sb *Backend) Broadcast(valSet istanbul.ValidatorSet, code uint64, payload 
 }
 
 // Gossip implements istanbul.Backend.Gossip
-func (sb *Backend) Gossip(valSet istanbul.ValidatorSet, code uint64, payload []byte) error {
+func (sb *Backend) Gossip(valSet consensus.ValidatorSet, code uint64, payload []byte) error {
 	hash := istanbul.RLPHash(payload)
 	sb.knownMessages.Add(hash, true)
 
@@ -335,14 +340,14 @@ func (sb *Backend) GetProposer(number uint64) libcommon.Address {
 }
 
 // ParentValidators implements istanbul.Backend.GetParentValidators
-func (sb *Backend) ParentValidators(proposal istanbul.Proposal) istanbul.ValidatorSet {
+func (sb *Backend) ParentValidators(proposal istanbul.Proposal) consensus.ValidatorSet {
 	if block, ok := proposal.(*types.Block); ok {
 		return sb.getValidators(block.Number().Uint64()-1, block.ParentHash())
 	}
 	return validator.NewSet(nil, sb.config.ProposerPolicy)
 }
 
-func (sb *Backend) getValidators(number uint64, hash libcommon.Hash) istanbul.ValidatorSet {
+func (sb *Backend) getValidators(number uint64, hash libcommon.Hash) consensus.ValidatorSet {
 	snap, err := sb.snapshot(sb.chain, number, hash, nil)
 	if err != nil {
 		return validator.NewSet(nil, sb.config.ProposerPolicy)
@@ -399,7 +404,7 @@ func (sb *Backend) IsQBFTConsensusAt(blockNumber *big.Int) bool {
 func (sb *Backend) startIBFT() error {
 	sb.logger.Info("BFT: activate IBFT")
 	sb.logger.Trace("BFT: set ProposerPolicy sorter to ValidatorSortByStringFun")
-	sb.config.ProposerPolicy.Use(istanbul.ValidatorSortByString())
+	sb.config.ProposerPolicy.Use(consensus.ValidatorSortByString())
 	sb.qbftConsensusEnabled = false
 
 	sb.core = ibftcore.New(sb, sb.config)
@@ -414,7 +419,7 @@ func (sb *Backend) startIBFT() error {
 func (sb *Backend) startQBFT() error {
 	sb.logger.Info("BFT: activate QBFT")
 	sb.logger.Trace("BFT: set ProposerPolicy sorter to ValidatorSortByByteFunc")
-	sb.config.ProposerPolicy.Use(istanbul.ValidatorSortByByte())
+	sb.config.ProposerPolicy.Use(consensus.ValidatorSortByByte())
 	sb.qbftConsensusEnabled = true
 
 	sb.core = qbftcore.New(sb, sb.config)

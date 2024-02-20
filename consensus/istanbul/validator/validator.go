@@ -21,16 +21,16 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/length"
-	"github.com/ledgerwatch/erigon/consensus/istanbul"
+	"github.com/ledgerwatch/erigon/consensus"
 )
 
-func New(addr libcommon.Address) istanbul.Validator {
+func New(addr libcommon.Address) consensus.Validator {
 	return &defaultValidator{
 		address: addr,
 	}
 }
 
-func NewSet(addrs []libcommon.Address, policy *istanbul.ProposerPolicy) istanbul.ValidatorSet {
+func NewSet(addrs []libcommon.Address, policy *consensus.ProposerPolicy) consensus.ValidatorSet {
 	return newDefaultSet(addrs, policy)
 }
 
@@ -49,7 +49,7 @@ func ValidExtraData(extraData []byte) bool {
 	return len(extraData)%length.Addr == 0
 }
 
-func SortedAddresses(validators []istanbul.Validator) []libcommon.Address {
+func SortedAddresses(validators []consensus.Validator) []libcommon.Address {
 	addrs := make([]libcommon.Address, len(validators))
 	for i, validator := range validators {
 		addrs[i] = validator.Address()

@@ -20,6 +20,7 @@ import (
 	"reflect"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
@@ -52,7 +53,7 @@ func (c *core) broadcastCommit(sub *istanbul.Subject) {
 	})
 }
 
-func (c *core) handleCommit(msg *ibfttypes.Message, src istanbul.Validator) error {
+func (c *core) handleCommit(msg *ibfttypes.Message, src consensus.Validator) error {
 	// Decode COMMIT message
 	var commit *istanbul.Subject
 	err := msg.Decode(&commit)
@@ -84,7 +85,7 @@ func (c *core) handleCommit(msg *ibfttypes.Message, src istanbul.Validator) erro
 }
 
 // verifyCommit verifies if the received COMMIT message is equivalent to our subject
-func (c *core) verifyCommit(commit *istanbul.Subject, src istanbul.Validator) error {
+func (c *core) verifyCommit(commit *istanbul.Subject, src consensus.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 
 	sub := c.current.Subject()
@@ -96,7 +97,7 @@ func (c *core) verifyCommit(commit *istanbul.Subject, src istanbul.Validator) er
 	return nil
 }
 
-func (c *core) acceptCommit(msg *ibfttypes.Message, src istanbul.Validator) error {
+func (c *core) acceptCommit(msg *ibfttypes.Message, src consensus.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 
 	// Add the COMMIT message to current round state

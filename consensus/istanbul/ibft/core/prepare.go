@@ -19,6 +19,7 @@ package core
 import (
 	"reflect"
 
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
@@ -39,7 +40,7 @@ func (c *core) sendPrepare() {
 	})
 }
 
-func (c *core) handlePrepare(msg *ibfttypes.Message, src istanbul.Validator) error {
+func (c *core) handlePrepare(msg *ibfttypes.Message, src consensus.Validator) error {
 	// Decode PREPARE message
 	var prepare *istanbul.Subject
 	err := msg.Decode(&prepare)
@@ -72,7 +73,7 @@ func (c *core) handlePrepare(msg *ibfttypes.Message, src istanbul.Validator) err
 }
 
 // verifyPrepare verifies if the received PREPARE message is equivalent to our subject
-func (c *core) verifyPrepare(prepare *istanbul.Subject, src istanbul.Validator) error {
+func (c *core) verifyPrepare(prepare *istanbul.Subject, src consensus.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 
 	sub := c.current.Subject()
@@ -84,7 +85,7 @@ func (c *core) verifyPrepare(prepare *istanbul.Subject, src istanbul.Validator) 
 	return nil
 }
 
-func (c *core) acceptPrepare(msg *ibfttypes.Message, src istanbul.Validator) error {
+func (c *core) acceptPrepare(msg *ibfttypes.Message, src consensus.Validator) error {
 	logger := c.logger.New("from", src, "state", c.state)
 
 	// Add the PREPARE message to current round state

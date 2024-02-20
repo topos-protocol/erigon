@@ -117,7 +117,7 @@ func makeBlock(chain *core.BlockChain, engine *Backend, parent *types.Block) *ty
 
 func makeBlockWithoutSeal(chain *core.BlockChain, engine *Backend, parent *types.Block) *types.Block {
 	header := makeHeader(parent, engine.config)
-	engine.Prepare(chain, header)
+	engine.Prepare(chain, header, nil)
 	state, _, _ := chain.StateAt(parent.Root())
 	block, _ := engine.FinalizeAndAssemble(chain, header, state, nil, nil, nil)
 	return block
@@ -128,12 +128,12 @@ func TestIBFTPrepare(t *testing.T) {
 	defer engine.Stop()
 	chain.Config().Istanbul.TestQBFTBlock = nil
 	header := makeHeader(chain.Genesis(), engine.config)
-	err := engine.Prepare(chain, header)
+	err := engine.Prepare(chain, header, nil)
 	if err != nil {
 		t.Errorf("error mismatch: have %v, want nil", err)
 	}
 	header.ParentHash = common.StringToHash("1234567890")
-	err = engine.Prepare(chain, header)
+	err = engine.Prepare(chain, header, nil)
 	if err != consensus.ErrUnknownAncestor {
 		t.Errorf("error mismatch: have %v, want %v", err, consensus.ErrUnknownAncestor)
 	}
@@ -143,13 +143,13 @@ func TestQBFTPrepare(t *testing.T) {
 	chain, engine := newBlockChain(1, big.NewInt(0))
 	defer engine.Stop()
 	header := makeHeader(chain.Genesis(), engine.config)
-	err := engine.Prepare(chain, header)
+	err := engine.Prepare(chain, header, nil)
 	if err != nil {
 		t.Errorf("error mismatch: have %v, want nil", err)
 	}
 
 	header.ParentHash = common.StringToHash("1234567890")
-	err = engine.Prepare(chain, header)
+	err = engine.Prepare(chain, header, nil)
 	if err != consensus.ErrUnknownAncestor {
 		t.Errorf("error mismatch: have %v, want %v", err, consensus.ErrUnknownAncestor)
 	}

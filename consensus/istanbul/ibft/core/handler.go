@@ -18,6 +18,7 @@ package core
 
 import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
@@ -155,7 +156,7 @@ func (c *core) handleMsg(payload []byte) error {
 	return c.handleCheckedMsg(msg, src)
 }
 
-func (c *core) handleCheckedMsg(msg *ibfttypes.Message, src istanbul.Validator) error {
+func (c *core) handleCheckedMsg(msg *ibfttypes.Message, src consensus.Validator) error {
 	logger := c.logger.New("address", c.address, "from", src)
 
 	// Store the message if it's a future message

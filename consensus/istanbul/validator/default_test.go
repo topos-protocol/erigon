@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	"github.com/ledgerwatch/erigon/crypto"
 )
@@ -41,7 +42,7 @@ func TestValidatorSet(t *testing.T) {
 }
 
 func testNewValidatorSet(t *testing.T) {
-	var validators []istanbul.Validator
+	var validators []consensus.Validator
 	const ValCnt = 100
 
 	// Create 100 validators with random addresses

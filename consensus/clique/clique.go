@@ -300,7 +300,7 @@ func (c *Clique) VerifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 
 // Prepare implements consensus.Engine, preparing all the consensus fields of the
 // header for running the transactions on top.
-func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState) error {
+func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, validators consensus.ValidatorSet) error {
 	c.logger.Info(">>>>>>>>> Clicque Prepare <<<<<<<<<<<<<<<")
 
 	// If the block isn't a checkpoint, cast a random vote (good enough for now)

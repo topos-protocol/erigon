@@ -24,13 +24,14 @@ import (
 	"sync"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/rlp"
 )
 
 // Construct a new message set to accumulate messages for given sequence/view number.
-func newQBFTMsgSet(valSet istanbul.ValidatorSet) *qbftMsgSet {
+func newQBFTMsgSet(valSet consensus.ValidatorSet) *qbftMsgSet {
 	return &qbftMsgSet{
 		view: &istanbul.View{
 			Round:    new(big.Int),
@@ -46,7 +47,7 @@ func newQBFTMsgSet(valSet istanbul.ValidatorSet) *qbftMsgSet {
 
 type qbftMsgSet struct {
 	view       *istanbul.View
-	valSet     istanbul.ValidatorSet
+	valSet     consensus.ValidatorSet
 	messagesMu *sync.Mutex
 	messages   map[libcommon.Address]qbfttypes.QBFTMessage
 }
@@ -138,7 +139,7 @@ func (ms *qbftMsgSet) DecodeRLP(stream *rlp.Stream) error {
 	}
 	var msgSet struct {
 		MsgView *istanbul.View
-		//		valSet        istanbul.ValidatorSet
+		//		valSet        consensus.ValidatorSet
 		MessagesSlice []qbftMsgMapAsStruct
 	}
 	if err := stream.Decode(&msgSet); err != nil {

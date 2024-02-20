@@ -24,6 +24,7 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	metrics "github.com/ledgerwatch/erigon-lib/metrics"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -72,7 +73,7 @@ type core struct {
 	timeoutSub            *event.TypeMuxSubscription
 	futurePreprepareTimer *time.Timer
 
-	valSet     istanbul.ValidatorSet
+	valSet     consensus.ValidatorSet
 	validateFn func([]byte, []byte) (libcommon.Address, error)
 
 	backlogs   map[libcommon.Address]*prque.Prque
@@ -217,7 +218,7 @@ func (c *core) startNewRound(round *big.Int) {
 }
 
 // updateRoundState updates round state by checking if locking block is necessary
-func (c *core) updateRoundState(view *istanbul.View, validatorSet istanbul.ValidatorSet, roundChange bool) {
+func (c *core) updateRoundState(view *istanbul.View, validatorSet consensus.ValidatorSet, roundChange bool) {
 	if roundChange && c.current != nil {
 		c.current = newRoundState(view, validatorSet, c.current.Preprepare, c.current.preparedRound, c.current.preparedBlock, c.current.pendingRequest, c.backend.HasBadProposal)
 	} else {

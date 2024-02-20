@@ -25,6 +25,7 @@ import (
 	"github.com/ledgerwatch/erigon-lib/common"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutility"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -194,7 +195,7 @@ func (c *core) highestPrepared(round *big.Int) (*big.Int, istanbul.Proposal) {
 
 // ----------------------------------------------------------------------------
 
-func newRoundChangeSet(valSet istanbul.ValidatorSet) *roundChangeSet {
+func newRoundChangeSet(valSet consensus.ValidatorSet) *roundChangeSet {
 	return &roundChangeSet{
 		validatorSet:         valSet,
 		roundChanges:         make(map[uint64]*qbftMsgSet),
@@ -206,7 +207,7 @@ func newRoundChangeSet(valSet istanbul.ValidatorSet) *roundChangeSet {
 }
 
 type roundChangeSet struct {
-	validatorSet         istanbul.ValidatorSet
+	validatorSet         consensus.ValidatorSet
 	roundChanges         map[uint64]*qbftMsgSet
 	prepareMessages      map[uint64][]*qbfttypes.Prepare
 	highestPreparedRound map[uint64]*big.Int

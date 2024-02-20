@@ -22,10 +22,11 @@ import (
 	"testing"
 
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 )
 
-func newTestRoundState(view *istanbul.View, validatorSet istanbul.ValidatorSet) *roundState {
+func newTestRoundState(view *istanbul.View, validatorSet consensus.ValidatorSet) *roundState {
 	return &roundState{
 		round:      view.Round,
 		sequence:   view.Sequence,

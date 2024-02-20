@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/erigon/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	qbfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/qbft/types"
 	"github.com/ledgerwatch/erigon/consensus/istanbul/validator"
@@ -79,7 +80,7 @@ func testParameterizedCase(
 	preparesNotForTargetRound int,
 	messageJustified bool) {
 	pp := istanbul.NewRoundRobinProposerPolicy()
-	pp.Use(istanbul.ValidatorSortByByte())
+	pp.Use(consensus.ValidatorSortByByte())
 	validatorSet := validator.NewSet(generateValidators(quorumSize), pp)
 	block := makeBlock(1)
 	var round int64 = 10

@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
@@ -67,7 +68,7 @@ func (c *core) sendRoundChange(round *big.Int) {
 	})
 }
 
-func (c *core) handleRoundChange(msg *ibfttypes.Message, src istanbul.Validator) error {
+func (c *core) handleRoundChange(msg *ibfttypes.Message, src consensus.Validator) error {
 	logger := c.logger.New("state", c.state, "from", src.Address().Hex())
 
 	// Decode ROUND CHANGE message
@@ -113,7 +114,7 @@ func (c *core) handleRoundChange(msg *ibfttypes.Message, src istanbul.Validator)
 
 // ----------------------------------------------------------------------------
 
-func newRoundChangeSet(valSet istanbul.ValidatorSet) *roundChangeSet {
+func newRoundChangeSet(valSet consensus.ValidatorSet) *roundChangeSet {
 	return &roundChangeSet{
 		validatorSet: valSet,
 		roundChanges: make(map[uint64]*messageSet),
@@ -122,7 +123,7 @@ func newRoundChangeSet(valSet istanbul.ValidatorSet) *roundChangeSet {
 }
 
 type roundChangeSet struct {
-	validatorSet istanbul.ValidatorSet
+	validatorSet consensus.ValidatorSet
 	roundChanges map[uint64]*messageSet
 	mu           *sync.Mutex
 }

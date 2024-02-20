@@ -19,126 +19,31 @@ package istanbul
 import (
 	"math/big"
 	"strings"
-	"sync"
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon/accounts/abi/bind"
 	"github.com/ledgerwatch/erigon/common/math"
-	"github.com/naoina/toml"
+	"github.com/ledgerwatch/erigon/consensus"
 )
-
-type ProposerPolicyId uint64
-
-const (
-	RoundRobin ProposerPolicyId = iota
-	Sticky
-)
-
-// ProposerPolicy represents the Validator Proposer Policy
-type ProposerPolicy struct {
-	Id         ProposerPolicyId    // Could be RoundRobin or Sticky
-	By         ValidatorSortByFunc // func that defines how the ValidatorSet should be sorted
-	registry   []ValidatorSet      // Holds the ValidatorSet for a given block height
-	registryMU *sync.Mutex         // Mutex to lock access to changes to Registry
-}
-
-// NewRoundRobinProposerPolicy returns a RoundRobin ProposerPolicy with ValidatorSortByString as default sort function
-func NewRoundRobinProposerPolicy() *ProposerPolicy {
-	return NewProposerPolicy(RoundRobin)
-}
-
-// NewStickyProposerPolicy return a Sticky ProposerPolicy with ValidatorSortByString as default sort function
-func NewStickyProposerPolicy() *ProposerPolicy {
-	return NewProposerPolicy(Sticky)
-}
-
-func NewProposerPolicy(id ProposerPolicyId) *ProposerPolicy {
-	return NewProposerPolicyByIdAndSortFunc(id, ValidatorSortByString())
-}
-
-func NewProposerPolicyByIdAndSortFunc(id ProposerPolicyId, by ValidatorSortByFunc) *ProposerPolicy {
-	return &ProposerPolicy{Id: id, By: by, registryMU: new(sync.Mutex)}
-}
-
-type proposerPolicyToml struct {
-	Id ProposerPolicyId
-}
-
-func (p *ProposerPolicy) MarshalTOML() (interface{}, error) {
-	if p == nil {
-		return nil, nil
-	}
-	pp := &proposerPolicyToml{Id: p.Id}
-	data, err := toml.Marshal(pp)
-	if err != nil {
-		return nil, err
-	}
-	return string(data), nil
-}
-
-func (p *ProposerPolicy) UnmarshalTOML(decode func(interface{}) error) error {
-	var innerToml string
-	err := decode(&innerToml)
-	if err != nil {
-		return err
-	}
-	var pp proposerPolicyToml
-	err = toml.Unmarshal([]byte(innerToml), &pp)
-	if err != nil {
-		return err
-	}
-	p.Id = pp.Id
-	p.By = ValidatorSortByString()
-	return nil
-}
-
-// Use sets the ValidatorSortByFunc for the given ProposerPolicy and sorts the validatorSets according to it
-func (p *ProposerPolicy) Use(v ValidatorSortByFunc) {
-	p.By = v
-
-	for _, validatorSet := range p.registry {
-		validatorSet.SortValidators()
-	}
-}
-
-// RegisterValidatorSet stores the given ValidatorSet in the policy registry
-func (p *ProposerPolicy) RegisterValidatorSet(valSet ValidatorSet) {
-	p.registryMU.Lock()
-	defer p.registryMU.Unlock()
-
-	if len(p.registry) == 0 {
-		p.registry = []ValidatorSet{valSet}
-	} else {
-		p.registry = append(p.registry, valSet)
-	}
-}
-
-// ClearRegistry removes any ValidatorSet from the ProposerPolicy registry
-func (p *ProposerPolicy) ClearRegistry() {
-	p.registryMU.Lock()
-	defer p.registryMU.Unlock()
-
-	p.registry = nil
-}
 
 type Config struct {
-	RequestTimeout           uint64                `toml:",omitempty"` // The timeout for each Istanbul round in milliseconds.
-	BlockPeriod              uint64                `toml:",omitempty"` // Default minimum difference between two consecutive block's timestamps in second
-	EmptyBlockPeriod         uint64                `toml:",omitempty"` // Default minimum difference between a block and empty block's timestamps in second
-	ProposerPolicy           *ProposerPolicy       `toml:",omitempty"` // The policy for proposer selection
-	Epoch                    uint64                `toml:",omitempty"` // The number of blocks after which to checkpoint and reset the pending votes
-	Ceil2Nby3Block           *big.Int              `toml:",omitempty"` // Number of confirmations required to move from one state to next [2F + 1 to Ceil(2N/3)]
-	AllowedFutureBlockTime   uint64                `toml:",omitempty"` // Max time (in seconds) from current time allowed for blocks, before they're considered future blocks
-	TestQBFTBlock            *big.Int              `toml:",omitempty"` // Fork block at which block confirmations are done using qbft consensus instead of ibft
-	BeneficiaryMode          *string               `toml:",omitempty"` // Mode for setting the beneficiary, either: list, besu, validators (beneficiary list is the list of validators)
-	BlockReward              *math.HexOrDecimal256 `toml:",omitempty"` // Reward
-	MiningBeneficiary        *libcommon.Address    `toml:",omitempty"` // Wallet address that benefits at every new block (besu mode)
-	ValidatorContract        libcommon.Address     `toml:",omitempty"`
-	Validators               []libcommon.Address   `toml:",omitempty"`
-	ValidatorSelectionMode   *string               `toml:",omitempty"`
-	Client                   bind.ContractCaller   `toml:",omitempty"`
-	MaxRequestTimeoutSeconds uint64                `toml:",omitempty"`
+	RequestTimeout           uint64                    `toml:",omitempty"` // The timeout for each Istanbul round in milliseconds.
+	BlockPeriod              uint64                    `toml:",omitempty"` // Default minimum difference between two consecutive block's timestamps in second
+	EmptyBlockPeriod         uint64                    `toml:",omitempty"` // Default minimum difference between a block and empty block's timestamps in second
+	ProposerPolicy           *consensus.ProposerPolicy `toml:",omitempty"` // The policy for proposer selection
+	Epoch                    uint64                    `toml:",omitempty"` // The number of blocks after which to checkpoint and reset the pending votes
+	Ceil2Nby3Block           *big.Int                  `toml:",omitempty"` // Number of confirmations required to move from one state to next [2F + 1 to Ceil(2N/3)]
+	AllowedFutureBlockTime   uint64                    `toml:",omitempty"` // Max time (in seconds) from current time allowed for blocks, before they're considered future blocks
+	TestQBFTBlock            *big.Int                  `toml:",omitempty"` // Fork block at which block confirmations are done using qbft consensus instead of ibft
+	BeneficiaryMode          *string                   `toml:",omitempty"` // Mode for setting the beneficiary, either: list, besu, validators (beneficiary list is the list of validators)
+	BlockReward              *math.HexOrDecimal256     `toml:",omitempty"` // Reward
+	MiningBeneficiary        *libcommon.Address        `toml:",omitempty"` // Wallet address that benefits at every new block (besu mode)
+	ValidatorContract        libcommon.Address         `toml:",omitempty"`
+	Validators               []libcommon.Address       `toml:",omitempty"`
+	ValidatorSelectionMode   *string                   `toml:",omitempty"`
+	Client                   bind.ContractCaller       `toml:",omitempty"`
+	MaxRequestTimeoutSeconds uint64                    `toml:",omitempty"`
 	Transitions              []chain.Transition
 }
 
@@ -146,7 +51,7 @@ var DefaultConfig = &Config{
 	RequestTimeout:         10000,
 	BlockPeriod:            5,
 	EmptyBlockPeriod:       0,
-	ProposerPolicy:         NewRoundRobinProposerPolicy(),
+	ProposerPolicy:         consensus.NewRoundRobinProposerPolicy(),
 	Epoch:                  30000,
 	Ceil2Nby3Block:         big.NewInt(0),
 	AllowedFutureBlockTime: 0,

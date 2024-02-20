@@ -14,15 +14,111 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package istanbul
+package consensus
 
 import (
 	"bytes"
 	"sort"
 	"strings"
+	"sync"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/naoina/toml"
 )
+
+type ProposerPolicyId uint64
+
+const (
+	RoundRobin ProposerPolicyId = iota
+	Sticky
+)
+
+// ProposerPolicy represents the Validator Proposer Policy
+type ProposerPolicy struct {
+	Id         ProposerPolicyId    // Could be RoundRobin or Sticky
+	By         ValidatorSortByFunc // func that defines how the ValidatorSet should be sorted
+	registry   []ValidatorSet      // Holds the ValidatorSet for a given block height
+	registryMU *sync.Mutex         // Mutex to lock access to changes to Registry
+}
+
+// NewRoundRobinProposerPolicy returns a RoundRobin ProposerPolicy with ValidatorSortByString as default sort function
+func NewRoundRobinProposerPolicy() *ProposerPolicy {
+	return NewProposerPolicy(RoundRobin)
+}
+
+// NewStickyProposerPolicy return a Sticky ProposerPolicy with ValidatorSortByString as default sort function
+func NewStickyProposerPolicy() *ProposerPolicy {
+	return NewProposerPolicy(Sticky)
+}
+
+func NewProposerPolicy(id ProposerPolicyId) *ProposerPolicy {
+	return NewProposerPolicyByIdAndSortFunc(id, ValidatorSortByString())
+}
+
+func NewProposerPolicyByIdAndSortFunc(id ProposerPolicyId, by ValidatorSortByFunc) *ProposerPolicy {
+	return &ProposerPolicy{Id: id, By: by, registryMU: new(sync.Mutex)}
+}
+
+type proposerPolicyToml struct {
+	Id ProposerPolicyId
+}
+
+func (p *ProposerPolicy) MarshalTOML() (interface{}, error) {
+	if p == nil {
+		return nil, nil
+	}
+	pp := &proposerPolicyToml{Id: p.Id}
+	data, err := toml.Marshal(pp)
+	if err != nil {
+		return nil, err
+	}
+	return string(data), nil
+}
+
+func (p *ProposerPolicy) UnmarshalTOML(decode func(interface{}) error) error {
+	var innerToml string
+	err := decode(&innerToml)
+	if err != nil {
+		return err
+	}
+	var pp proposerPolicyToml
+	err = toml.Unmarshal([]byte(innerToml), &pp)
+	if err != nil {
+		return err
+	}
+	p.Id = pp.Id
+	p.By = ValidatorSortByString()
+	return nil
+}
+
+// Use sets the ValidatorSortByFunc for the given ProposerPolicy and sorts the validatorSets according to it
+func (p *ProposerPolicy) Use(v ValidatorSortByFunc) {
+	p.By = v
+
+	for _, validatorSet := range p.registry {
+		validatorSet.SortValidators()
+	}
+}
+
+// RegisterValidatorSet stores the given ValidatorSet in the policy registry
+func (p *ProposerPolicy) RegisterValidatorSet(valSet ValidatorSet) {
+	p.registryMU.Lock()
+	defer p.registryMU.Unlock()
+
+	if len(p.registry) == 0 {
+		p.registry = []ValidatorSet{valSet}
+	} else {
+		p.registry = append(p.registry, valSet)
+	}
+}
+
+// ClearRegistry removes any ValidatorSet from the ProposerPolicy registry
+func (p *ProposerPolicy) ClearRegistry() {
+	p.registryMU.Lock()
+	defer p.registryMU.Unlock()
+
+	p.registry = nil
+}
 
 type Validator interface {
 	// Address returns address

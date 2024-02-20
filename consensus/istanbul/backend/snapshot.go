@@ -22,7 +22,7 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
-	"github.com/ledgerwatch/erigon/consensus/istanbul"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul/validator"
 )
 
@@ -54,13 +54,13 @@ type Snapshot struct {
 	Hash   libcommon.Hash              // Block hash where the snapshot was created
 	Votes  []*Vote                     // List of votes cast in chronological order
 	Tally  map[libcommon.Address]Tally // Current vote tally to avoid recalculating
-	ValSet istanbul.ValidatorSet       // Set of authorized validators at this moment
+	ValSet consensus.ValidatorSet      // Set of authorized validators at this moment
 }
 
 // newSnapshot create a new snapshot with the specified startup parameters. This
 // method does not initialize the set of recent validators, so only ever use if for
 // the genesis block.
-func newSnapshot(epoch uint64, number uint64, hash libcommon.Hash, valSet istanbul.ValidatorSet) *Snapshot {
+func newSnapshot(epoch uint64, number uint64, hash libcommon.Hash, valSet consensus.ValidatorSet) *Snapshot {
 	snap := &Snapshot{
 		Epoch:  epoch,
 		Number: number,
@@ -181,8 +181,8 @@ type snapshotJSON struct {
 	Tally  map[libcommon.Address]Tally `json:"tally"`
 
 	// for validator set
-	Validators []libcommon.Address       `json:"validators"`
-	Policy     istanbul.ProposerPolicyId `json:"policy"`
+	Validators []libcommon.Address        `json:"validators"`
+	Policy     consensus.ProposerPolicyId `json:"policy"`
 }
 
 func (s *Snapshot) toJSONStruct() *snapshotJSON {
@@ -211,7 +211,7 @@ func (s *Snapshot) UnmarshalJSON(b []byte) error {
 	s.Tally = j.Tally
 
 	// Setting the By function to ValidatorSortByStringFunc should be fine, as the validator do not change only the order changes
-	pp := istanbul.NewProposerPolicyByIdAndSortFunc(j.Policy, istanbul.ValidatorSortByString())
+	pp := consensus.NewProposerPolicyByIdAndSortFunc(j.Policy, consensus.ValidatorSortByString())
 	s.ValSet = validator.NewSet(j.Validators, pp)
 	return nil
 }

@@ -22,7 +22,7 @@ import (
 	"sync"
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
-	"github.com/ledgerwatch/erigon/consensus/istanbul"
+	"github.com/ledgerwatch/erigon/consensus"
 )
 
 type defaultValidator struct {
@@ -40,20 +40,20 @@ func (val *defaultValidator) String() string {
 // ----------------------------------------------------------------------------
 
 type defaultSet struct {
-	validators istanbul.Validators
-	policy     *istanbul.ProposerPolicy
+	validators consensus.Validators
+	policy     *consensus.ProposerPolicy
 
-	proposer    istanbul.Validator
+	proposer    consensus.Validator
 	validatorMu sync.RWMutex
-	selector    istanbul.ProposalSelector
+	selector    consensus.ProposalSelector
 }
 
-func newDefaultSet(addrs []libcommon.Address, policy *istanbul.ProposerPolicy) *defaultSet {
+func newDefaultSet(addrs []libcommon.Address, policy *consensus.ProposerPolicy) *defaultSet {
 	valSet := &defaultSet{}
 
 	valSet.policy = policy
 	// init validators
-	valSet.validators = make([]istanbul.Validator, len(addrs))
+	valSet.validators = make([]consensus.Validator, len(addrs))
 	for i, addr := range addrs {
 		valSet.validators[i] = New(addr)
 	}
@@ -64,7 +64,7 @@ func newDefaultSet(addrs []libcommon.Address, policy *istanbul.ProposerPolicy) *
 		valSet.proposer = valSet.GetByIndex(0)
 	}
 	valSet.selector = roundRobinProposer
-	if policy.Id == istanbul.Sticky {
+	if policy.Id == consensus.Sticky {
 		valSet.selector = stickyProposer
 	}
 
@@ -79,13 +79,13 @@ func (valSet *defaultSet) Size() int {
 	return len(valSet.validators)
 }
 
-func (valSet *defaultSet) List() []istanbul.Validator {
+func (valSet *defaultSet) List() []consensus.Validator {
 	valSet.validatorMu.RLock()
 	defer valSet.validatorMu.RUnlock()
 	return valSet.validators
 }
 
-func (valSet *defaultSet) GetByIndex(i uint64) istanbul.Validator {
+func (valSet *defaultSet) GetByIndex(i uint64) consensus.Validator {
 	valSet.validatorMu.RLock()
 	defer valSet.validatorMu.RUnlock()
 	if i < uint64(valSet.Size()) {
@@ -94,7 +94,7 @@ func (valSet *defaultSet) GetByIndex(i uint64) istanbul.Validator {
 	return nil
 }
 
-func (valSet *defaultSet) GetByAddress(addr libcommon.Address) (int, istanbul.Validator) {
+func (valSet *defaultSet) GetByAddress(addr libcommon.Address) (int, consensus.Validator) {
 	for i, val := range valSet.List() {
 		if addr == val.Address() {
 			return i, val
@@ -103,7 +103,7 @@ func (valSet *defaultSet) GetByAddress(addr libcommon.Address) (int, istanbul.Va
 	return -1, nil
 }
 
-func (valSet *defaultSet) GetProposer() istanbul.Validator {
+func (valSet *defaultSet) GetProposer() consensus.Validator {
 	return valSet.proposer
 }
 
@@ -123,7 +123,7 @@ func (valSet *defaultSet) SortValidators() {
 	valSet.Policy().By.Sort(valSet.validators)
 }
 
-func calcSeed(valSet istanbul.ValidatorSet, proposer libcommon.Address, round uint64) uint64 {
+func calcSeed(valSet consensus.ValidatorSet, proposer libcommon.Address, round uint64) uint64 {
 	offset := 0
 	if idx, val := valSet.GetByAddress(proposer); val != nil {
 		offset = idx
@@ -135,7 +135,7 @@ func emptyAddress(addr libcommon.Address) bool {
 	return addr == libcommon.Address{}
 }
 
-func roundRobinProposer(valSet istanbul.ValidatorSet, proposer libcommon.Address, round uint64) istanbul.Validator {
+func roundRobinProposer(valSet consensus.ValidatorSet, proposer libcommon.Address, round uint64) consensus.Validator {
 	if valSet.Size() == 0 {
 		return nil
 	}
@@ -149,7 +149,7 @@ func roundRobinProposer(valSet istanbul.ValidatorSet, proposer libcommon.Address
 	return valSet.GetByIndex(pick)
 }
 
-func stickyProposer(valSet istanbul.ValidatorSet, proposer libcommon.Address, round uint64) istanbul.Validator {
+func stickyProposer(valSet consensus.ValidatorSet, proposer libcommon.Address, round uint64) consensus.Validator {
 	if valSet.Size() == 0 {
 		return nil
 	}
@@ -191,7 +191,7 @@ func (valSet *defaultSet) RemoveValidator(address libcommon.Address) bool {
 	return false
 }
 
-func (valSet *defaultSet) Copy() istanbul.ValidatorSet {
+func (valSet *defaultSet) Copy() consensus.ValidatorSet {
 	valSet.validatorMu.RLock()
 	defer valSet.validatorMu.RUnlock()
 
@@ -204,4 +204,4 @@ func (valSet *defaultSet) Copy() istanbul.ValidatorSet {
 
 func (valSet *defaultSet) F() int { return int(math.Ceil(float64(valSet.Size())/3)) - 1 }
 
-func (valSet *defaultSet) Policy() istanbul.ProposerPolicy { return *valSet.policy }
+func (valSet *defaultSet) Policy() consensus.ProposerPolicy { return *valSet.policy }

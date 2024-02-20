@@ -134,14 +134,14 @@ func (sb *Backend) VerifySeal(chain consensus.ChainHeaderReader, header *types.H
 
 // Prepare initializes the consensus fields of a block header according to the
 // rules of a particular engine. The changes are executed inline.
-func (sb *Backend) Prepare(chain consensus.ChainHeaderReader, header *types.Header) error {
+func (sb *Backend) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState) error {
 	// Assemble the voting snapshot
 	snap, err := sb.snapshot(chain, header.Number.Uint64()-1, header.ParentHash, nil)
 	if err != nil {
 		return err
 	}
 
-	err = sb.EngineForBlockNumber(header.Number).Prepare(chain, header, snap.ValSet)
+	err = sb.EngineForBlockNumber(header.Number).Prepare(chain, header, state, snap.ValSet)
 	if err != nil {
 		return err
 	}

@@ -25,6 +25,7 @@ import (
 
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	metrics "github.com/ledgerwatch/erigon-lib/metrics"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	ibfttypes "github.com/ledgerwatch/erigon/consensus/istanbul/ibft/types"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -73,7 +74,7 @@ type core struct {
 	timeoutSub            *event.TypeMuxSubscription
 	futurePreprepareTimer *time.Timer
 
-	valSet                istanbul.ValidatorSet
+	valSet                consensus.ValidatorSet
 	waitingForRoundChange bool
 	validateFn            func([]byte, []byte) (libcommon.Address, error)
 
@@ -291,7 +292,7 @@ func (c *core) catchUpRound(view *istanbul.View) {
 }
 
 // updateRoundState updates round state by checking if locking block is necessary
-func (c *core) updateRoundState(view *istanbul.View, validatorSet istanbul.ValidatorSet, roundChange bool) {
+func (c *core) updateRoundState(view *istanbul.View, validatorSet consensus.ValidatorSet, roundChange bool) {
 	// Lock only if both roundChange is true and it is locked
 	if roundChange && c.current != nil {
 		if c.current.IsHashLocked() {

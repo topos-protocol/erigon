@@ -18,6 +18,7 @@ package istanbul
 
 import (
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
+	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/rlp"
 	"github.com/ledgerwatch/log/v3"
@@ -52,7 +53,7 @@ func GetSignatureAddressNoHashing(data []byte, sig []byte) (libcommon.Address, e
 	return crypto.PubkeyToAddress(*pubkey), nil
 }
 
-func CheckValidatorSignature(valSet ValidatorSet, data []byte, sig []byte) (libcommon.Address, error) {
+func CheckValidatorSignature(valSet consensus.ValidatorSet, data []byte, sig []byte) (libcommon.Address, error) {
 	// 1. Get signature address
 	signer, err := GetSignatureAddress(data, sig)
 	if err != nil {

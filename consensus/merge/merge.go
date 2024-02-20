@@ -108,13 +108,13 @@ func (s *Merge) VerifyUncles(chain consensus.ChainReader, header *types.Header, 
 }
 
 // Prepare makes sure difficulty and nonce are correct
-func (s *Merge) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState) error {
+func (s *Merge) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, validators consensus.ValidatorSet) error {
 	reached, err := IsTTDReached(chain, header.ParentHash, header.Number.Uint64()-1)
 	if err != nil {
 		return err
 	}
 	if !reached {
-		return s.eth1Engine.Prepare(chain, header, state)
+		return s.eth1Engine.Prepare(chain, header, state, validators)
 	}
 	header.Difficulty = ProofOfStakeDifficulty
 	header.Nonce = ProofOfStakeNonce
