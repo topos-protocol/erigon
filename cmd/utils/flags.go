@@ -341,6 +341,17 @@ var (
 		Usage: "HTTP-RPC server listening port for the Engine API",
 		Value: nodecfg.DefaultAuthRpcPort,
 	}
+	// Istanbul settings
+	IstanbulRequestTimeoutFlag = cli.Uint64Flag{
+		Name:  "istanbul.requesttimeout",
+		Usage: "[Deprecated] Timeout for each Istanbul round in milliseconds",
+		Value: ethconfig.Defaults.Istanbul.RequestTimeoutSeconds,
+	}
+	IstanbulBlockPeriodFlag = cli.Uint64Flag{
+		Name:  "istanbul.blockperiod",
+		Usage: "[Deprecated] Default minimum difference between two consecutive block's timestamps in seconds",
+		Value: ethconfig.Defaults.Istanbul.BlockPeriodSeconds,
+	}
 
 	JWTSecretPath = cli.StringFlag{
 		Name:  "authrpc.jwtsecret",
@@ -1514,6 +1525,18 @@ func setMiner(ctx *cli.Context, cfg *params.MiningConfig) {
 	}
 	if ctx.IsSet(MinerNoVerfiyFlag.Name) {
 		cfg.Noverify = ctx.Bool(MinerNoVerfiyFlag.Name)
+	}
+}
+
+// Quorum
+func setIstanbul(ctx *cli.Context, cfg *ethconfig.Config) {
+	if ctx.IsSet(IstanbulRequestTimeoutFlag.Name) {
+		log.Warn("WARNING: The flag --istanbul.requesttimeout is deprecated and will be removed in the future, please use ibft.requesttimeoutseconds on genesis file")
+		cfg.Istanbul.RequestTimeoutSeconds = ctx.Uint64(IstanbulRequestTimeoutFlag.Name)
+	}
+	if ctx.IsSet(IstanbulBlockPeriodFlag.Name) {
+		log.Warn("WARNING: The flag --istanbul.blockperiod is deprecated and will be removed in the future, please use ibft.blockperiodseconds on genesis file")
+		cfg.Istanbul.BlockPeriodSeconds = ctx.Uint64(IstanbulBlockPeriodFlag.Name)
 	}
 }
 

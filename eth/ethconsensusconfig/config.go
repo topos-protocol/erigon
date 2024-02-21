@@ -72,7 +72,7 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 				panic(err)
 			}
 
-			var config istanbul.Config
+			var config istanbul.Config = *istanbul.DefaultConfig
 			if chainConfig.Istanbul.Epoch != 0 {
 				config.Epoch = chainConfig.Istanbul.Epoch
 			}
