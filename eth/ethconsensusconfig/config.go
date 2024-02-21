@@ -61,8 +61,31 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 		}
 	case *params.ConsensusSnapshotConfig:
 		logger.Info(">>>>>>>>>>>>>>>>>> ConsensusSnapshotConfig")
+		// If Istanbul is requested, set it up
+		if chainConfig.Istanbul != nil {
+			logger.Info(">>>>>>>>>>>>>>>>>> Istanbul config:", chainConfig.Istanbul, nil)
+			log.Warn("WARNING: The attribute config.istanbul is deprecated and will be removed in the future, please use config.ibft on genesis file")
+			var err error
+			var db kv.RwDB
+			db, err = node.OpenDatabase(ctx, nodeConfig, kv.ConsensusDB, "istanbul", readonly, logger)
+			if err != nil {
+				panic(err)
+			}
+
+			var config istanbul.Config
+			if chainConfig.Istanbul.Epoch != 0 {
+				config.Epoch = chainConfig.Istanbul.Epoch
+			}
+			config.ProposerPolicy = consensus.NewProposerPolicy(consensus.ProposerPolicyId(chainConfig.Istanbul.ProposerPolicy))
+			config.Ceil2Nby3Block = chainConfig.Istanbul.Ceil2Nby3Block
+			// config.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
+			config.TestQBFTBlock = chainConfig.Istanbul.TestQBFTBlock
+			log.Info(">>>>>>>>> IBFT random generated  key <<<<<<<<<<<<<<<")
+			nodeKey, _ := crypto.GenerateKey()
+			return istanbulBackend.New(&config, nodeKey, db)
+		}
 		if chainConfig.Clique != nil {
-			logger.Info(">>>>>>>>>>>>>>>>>> chainConfig:", chainConfig)
+			logger.Info(">>>>>>>>>>>>>>>>>> chainConfig:", chainConfig, nil)
 			if consensusCfg.InMemory {
 				nodeConfig.Dirs.DataDir = ""
 			} else {
@@ -85,28 +108,6 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 			}
 
 			eng = clique.New(chainConfig, consensusCfg, db, logger)
-		}
-		// If Istanbul is requested, set it up
-		if chainConfig.Istanbul != nil {
-			log.Warn("WARNING: The attribute config.istanbul is deprecated and will be removed in the future, please use config.ibft on genesis file")
-			var err error
-			var db kv.RwDB
-			db, err = node.OpenDatabase(ctx, nodeConfig, kv.ConsensusDB, "istanbul", readonly, logger)
-			if err != nil {
-				panic(err)
-			}
-
-			var config istanbul.Config
-			if chainConfig.Istanbul.Epoch != 0 {
-				config.Epoch = chainConfig.Istanbul.Epoch
-			}
-			config.ProposerPolicy = consensus.NewProposerPolicy(consensus.ProposerPolicyId(chainConfig.Istanbul.ProposerPolicy))
-			config.Ceil2Nby3Block = chainConfig.Istanbul.Ceil2Nby3Block
-			// config.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
-			config.TestQBFTBlock = chainConfig.Istanbul.TestQBFTBlock
-			log.Info(">>>>>>>>> IBFT random generated  key <<<<<<<<<<<<<<<")
-			nodeKey, _ := crypto.GenerateKey()
-			return istanbulBackend.New(&config, nodeKey, db)
 		}
 	case *chain.AuRaConfig:
 		if chainConfig.Aura != nil {

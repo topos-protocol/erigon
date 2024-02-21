@@ -34,9 +34,9 @@ import (
 )
 
 var (
-	roundMeter     = metrics.NewCounter("consensus/istanbul/qbft/core/round")
-	sequenceMeter  = metrics.NewCounter("consensus/istanbul/qbft/core/sequence")
-	consensusTimer = metrics.NewHistTimer("consensus/istanbul/qbft/core/consensus")
+	roundMeter     = metrics.NewCounter("ConsensusIstanbulQbftCoreRound")
+	sequenceMeter  = metrics.NewCounter("ConsensusIstanbulQbftCoreSequence")
+	consensusTimer = metrics.NewHistTimer("ConsensusIstanbulQbftCoreConsensus")
 )
 
 // New creates an Istanbul consensus core

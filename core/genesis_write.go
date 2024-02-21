@@ -88,6 +88,7 @@ func CommitGenesisBlockWithOverride(db kv.RwDB, genesis *types.Genesis, override
 
 func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrideCancunTime *big.Int, tmpDir string, logger log.Logger) (*chain.Config, *types.Block, error) {
 	var storedBlock *types.Block
+	logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock")
 	if genesis != nil && genesis.Config == nil {
 		return params.AllProtocolChanges, nil, types.ErrGenesisNoConfig
 	}
@@ -98,6 +99,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrideCancunTime *b
 	}
 
 	applyOverrides := func(config *chain.Config) {
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock applyOverrides")
 		if overrideCancunTime != nil {
 			config.CancunTime = overrideCancunTime
 		}
@@ -106,6 +108,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrideCancunTime *b
 	if (storedHash == libcommon.Hash{}) {
 		custom := true
 		if genesis == nil {
+			logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.10")
 			logger.Info("Writing main-net genesis block")
 			genesis = MainnetGenesisBlock()
 			custom = false
@@ -118,36 +121,44 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrideCancunTime *b
 		if custom {
 			logger.Info("Writing custom genesis block", "hash", block.Hash().String())
 		}
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.11")
 		return genesis.Config, block, nil
 	}
 
 	// Check whether the genesis block is already written.
 	if genesis != nil {
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.2")
 		block, _, err1 := GenesisToBlock(genesis, tmpDir)
 		if err1 != nil {
 			return genesis.Config, nil, err1
 		}
 		hash := block.Hash()
 		if hash != storedHash {
+			logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.3")
 			return genesis.Config, block, &types.GenesisMismatchError{Stored: storedHash, New: hash}
 		}
 	}
+	logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.4")
 	number := rawdb.ReadHeaderNumber(tx, storedHash)
 	if number != nil {
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.5")
 		var err error
 		storedBlock, _, err = rawdb.ReadBlockWithSenders(tx, storedHash, *number)
 		if err != nil {
 			return genesis.Config, nil, err
 		}
 	}
+	logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.6")
 	// Get the existing chain configuration.
 	newCfg := genesis.ConfigOrDefault(storedHash)
 	applyOverrides(newCfg)
 	if err := newCfg.CheckConfigForkOrder(); err != nil {
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.7")
 		return newCfg, nil, err
 	}
 	storedCfg, storedErr := rawdb.ReadChainConfig(tx, storedHash)
 	if storedErr != nil && newCfg.Bor == nil {
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.8")
 		return newCfg, nil, storedErr
 	}
 	if storedCfg == nil {
@@ -156,6 +167,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrideCancunTime *b
 		if err1 != nil {
 			return newCfg, nil, err1
 		}
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.9")
 		return newCfg, storedBlock, nil
 	}
 	// Special case: don't change the existing config of a private chain if no new
@@ -177,6 +189,7 @@ func WriteGenesisBlock(tx kv.RwTx, genesis *types.Genesis, overrideCancunTime *b
 	if err := rawdb.WriteChainConfig(tx, storedHash, newCfg); err != nil {
 		return newCfg, nil, err
 	}
+	logger.Info(">>>>>>>>>>>>>>>>>>>>>>> WriteGenesisBlock Checkpoint 1.91")
 	return newCfg, storedBlock, nil
 }
 
@@ -468,6 +481,7 @@ var DevnetSignKey = func(address libcommon.Address) *ecdsa.PrivateKey {
 
 // DeveloperGenesisBlock returns the 'geth --dev' genesis block.
 func DeveloperGenesisBlock(period uint64, faucet libcommon.Address) *types.Genesis {
+	log.Info(">>>>>>>>>>>>>>>>>>>>>>>> DeveloperGenesisBlock here we set config")
 	// Override the default period to the user requested one
 	config := *params.AllCliqueProtocolChanges
 	config.Clique.Period = period

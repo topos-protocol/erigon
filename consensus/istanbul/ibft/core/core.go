@@ -35,9 +35,9 @@ import (
 )
 
 var (
-	roundMeter     = metrics.NewCounter("consensus/istanbul/core/round")
-	sequenceMeter  = metrics.NewCounter("consensus/istanbul/core/sequence")
-	consensusTimer = metrics.NewHistTimer("consensus/istanbul/core/consensus")
+	roundMeter     = metrics.NewCounter("ConsensusIstanbulCoreRound")
+	sequenceMeter  = metrics.NewCounter("ConsensusIstanbulCoreSequence")
+	consensusTimer = metrics.NewHistTimer("ConsensusIstanbulCoreConsensus")
 )
 
 // New creates an Istanbul consensus core

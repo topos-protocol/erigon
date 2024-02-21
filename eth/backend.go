@@ -298,6 +298,8 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		if err != nil {
 			panic(err)
 		}
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>>> backend New Checkpoint 2.1")
+
 		genesisSpec := config.Genesis
 		if h != (libcommon.Hash{}) { // fallback to db content
 			genesisSpec = nil
@@ -500,10 +502,12 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	logger.Info("Initialising Ethereum protocol", "network", config.NetworkID)
 	var consensusConfig interface{}
 
-	if chainConfig.Clique != nil {
-		consensusConfig = &config.Clique
-	} else if chainConfig.Istanbul != nil {
+	if chainConfig.Istanbul != nil {
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>> CONSENSUS CONFIG INSTANBUL")
 		consensusConfig = &config.Istanbul
+	} else if chainConfig.Clique != nil {
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>> CONSENSUS CONFIG CLIQUE")
+		consensusConfig = &config.Clique
 	} else if chainConfig.Aura != nil {
 		consensusConfig = &config.Aura
 	} else if chainConfig.Bor != nil {

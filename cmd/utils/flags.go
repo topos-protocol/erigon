@@ -20,13 +20,14 @@ package utils
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/ledgerwatch/erigon/rpc/rpccfg"
 	"math/big"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ledgerwatch/erigon/rpc/rpccfg"
 
 	"github.com/ledgerwatch/erigon/cl/clparams"
 
@@ -1665,6 +1666,7 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	cfg.TxPool.DBDir = nodeConfig.Dirs.TxPool
 
 	setEthash(ctx, nodeConfig.Dirs.DataDir, cfg)
+	logger.Info(">>>>>>>>>>>>>>>>>>>>>>>>>> SetEthConfig setClique, data dir:", nodeConfig.Dirs.DataDir)
 	setClique(ctx, &cfg.Clique, nodeConfig.Dirs.DataDir)
 	setMiner(ctx, &cfg.Miner)
 	setWhitelist(ctx, cfg)
@@ -1721,6 +1723,7 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 			SetDNSDiscoveryDefaults(cfg, params.MainnetGenesisHash)
 		}
 	case networkname.DevChainName:
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>>>>>> HERE WE MAKE DEV GENESIS")
 		if !ctx.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkID = params.NetworkIDByChainName(chain)
 		}

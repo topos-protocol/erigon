@@ -124,6 +124,10 @@ func (c *Config) getEngine() string {
 	switch {
 	case c.Ethash != nil:
 		return c.Ethash.String()
+	case c.Istanbul != nil:
+		return c.Istanbul.String()
+	case c.IBFT != nil:
+		return c.IBFT.String()
 	case c.Clique != nil:
 		return c.Clique.String()
 	case c.Bor != nil:

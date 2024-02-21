@@ -50,6 +50,7 @@ processing will proceed even if an individual RLP-file import failure occurs.`,
 }
 
 func importChain(cliCtx *cli.Context) error {
+	log.Info(">>>>>>>>>>>>>>>>>> importChain:")
 	if cliCtx.NArg() < 1 {
 		utils.Fatalf("This command requires an argument.")
 	}

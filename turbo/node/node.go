@@ -96,6 +96,7 @@ func NewNodConfigUrfave(ctx *cli.Context, logger log.Logger) *nodecfg.Config {
 	return nodeConfig
 }
 func NewEthConfigUrfave(ctx *cli.Context, nodeConfig *nodecfg.Config, logger log.Logger) *ethconfig.Config {
+	logger.Info(">>>>>>>>>>>>>>>>>> NewEthConfigUrfave")
 	ethConfig := ethconfig.Defaults // Needs to be a copy, not pointer
 	utils.SetEthConfig(ctx, nodeConfig, &ethConfig, logger)
 	erigoncli.ApplyFlagsForEthConfig(ctx, &ethConfig, logger)
@@ -133,6 +134,7 @@ func New(
 }
 
 func NewNodeConfig() *nodecfg.Config {
+	log.Info(">>>>>>>>>>>>>>>>>>>>>>>>>>>> NewNodeConfig")
 	nodeConfig := nodecfg.DefaultConfig
 	// see simiar changes in `cmd/geth/config.go#defaultNodeConfig`
 	if commit := params.GitCommit; commit != "" {
