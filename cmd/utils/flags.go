@@ -1692,6 +1692,7 @@ func SetEthConfig(ctx *cli.Context, nodeConfig *nodecfg.Config, cfg *ethconfig.C
 	logger.Info(">>>>>>>>>>>>>>>>>>>>>>>>>> SetEthConfig setClique, data dir:", nodeConfig.Dirs.DataDir)
 	setClique(ctx, &cfg.Clique, nodeConfig.Dirs.DataDir)
 	setMiner(ctx, &cfg.Miner)
+	setIstanbul(ctx, cfg)
 	setWhitelist(ctx, cfg)
 	setBorConfig(ctx, cfg)
 	setSilkworm(ctx, cfg)

@@ -58,6 +58,7 @@ func (sb *Backend) Author(header *types.Header) (libcommon.Address, error) {
 // It will extract for each seal who signed it, regardless of if the seal is
 // repeated
 func (sb *Backend) Signers(header *types.Header) ([]libcommon.Address, error) {
+	log.Info(">>>>>>>>> Istanbul Signers <<<<<<<<<<<<<<<")
 	return sb.EngineForBlockNumber(header.Number).Signers(header)
 }
 
@@ -65,6 +66,7 @@ func (sb *Backend) Signers(header *types.Header) ([]libcommon.Address, error) {
 // given engine. Verifying the seal may be done optionally here, or explicitly
 // via the VerifySeal method.
 func (sb *Backend) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header, seal bool) error {
+	log.Info(">>>>>>>>> Istanbul VerifyHeader <<<<<<<<<<<<<<<")
 	return sb.verifyHeader(chain, header, nil)
 }
 
@@ -112,6 +114,7 @@ func (sb *Backend) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*t
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (sb *Backend) VerifySeal(chain consensus.ChainHeaderReader, header *types.Header) error {
+	log.Info(">>>>>>>>> Istanbul VerifySeal <<<<<<<<<<<<<<<")
 	// get parent header and ensure the signer is in parent's validator set
 	number := header.Number.Uint64()
 	if number == 0 {
@@ -130,6 +133,7 @@ func (sb *Backend) VerifySeal(chain consensus.ChainHeaderReader, header *types.H
 // Prepare initializes the consensus fields of a block header according to the
 // rules of a particular engine. The changes are executed inline.
 func (sb *Backend) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, validators consensus.ValidatorSet) error {
+	log.Info(">>>>>>>>> Istanbul Prepare <<<<<<<<<<<<<<<")
 	// Assemble the voting snapshot
 	snap, err := sb.snapshot(chain, header.Number.Uint64()-1, header.ParentHash, nil)
 	if err != nil {
@@ -179,6 +183,7 @@ func (sb *Backend) Finalize(config *chain.Config, header *types.Header, state *s
 	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
 	chain consensus.ChainReader, syscall consensus.SystemCall, logger log.Logger,
 ) (types.Transactions, types.Receipts, error) {
+	log.Info(">>>>>>>>> Istanbul Finalize <<<<<<<<<<<<<<<")
 	return sb.EngineForBlockNumber(header.Number).Finalize(config, header, state, txs, uncles, receipts, withdrawals, chain, syscall, logger)
 
 }
@@ -193,6 +198,7 @@ func (sb *Backend) FinalizeAndAssemble(chainConfig *chain.Config, header *types.
 	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
 	chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger,
 ) (*types.Block, types.Transactions, types.Receipts, error) {
+	log.Info(">>>>>>>>> Istanbul FinalizeAndAssemble <<<<<<<<<<<<<<<")
 	return sb.EngineForBlockNumber(header.Number).FinalizeAndAssemble(chainConfig, header, state, txs, uncles, receipts, withdrawals, chain, syscall, call, logger)
 
 }
@@ -218,6 +224,7 @@ func (sb *Backend) VerifyUncles(chain consensus.ChainReader, header *types.Heade
 // Seal generates a new block for the given input block with the local miner's
 // seal place on top.
 func (sb *Backend) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+	log.Info(">>>>>>>>> Istanbul Seal <<<<<<<<<<<<<<<")
 	// update the block header timestamp and signature and propose the block to core engine
 	header := block.Header()
 	number := header.Number.Uint64()

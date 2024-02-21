@@ -69,6 +69,8 @@ var LightClientGPO = gaspricecfg.Config{
 	IgnorePrice:      gaspricecfg.DefaultIgnorePrice,
 }
 
+var emptyBlockPeriodSeconds uint64 = 60
+
 // Defaults contains default settings for use on the Ethereum main net.
 var Defaults = Config{
 	Sync: Sync{
@@ -106,6 +108,17 @@ var Defaults = Config{
 
 	// applies if SilkwormLibraryPath is set
 	SilkwormExecution: true,
+	Istanbul: chain.IBFTConfig{
+		BFTConfig: &chain.BFTConfig{
+			EpochLength:              30000,
+			BlockPeriodSeconds:       5,
+			EmptyBlockPeriodSeconds:  &emptyBlockPeriodSeconds,
+			RequestTimeoutSeconds:    10,
+			ProposerPolicy:           0,
+			Ceil2Nby3Block:           big.NewInt(0),
+			ValidatorContractAddress: common.Address{},
+		},
+	},
 }
 
 func init() {
