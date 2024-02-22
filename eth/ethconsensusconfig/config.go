@@ -23,7 +23,6 @@ import (
 	"github.com/ledgerwatch/erigon/consensus/istanbul"
 	istanbulBackend "github.com/ledgerwatch/erigon/consensus/istanbul/backend"
 	"github.com/ledgerwatch/erigon/consensus/merge"
-	"github.com/ledgerwatch/erigon/crypto"
 	"github.com/ledgerwatch/erigon/node"
 	"github.com/ledgerwatch/erigon/node/nodecfg"
 	"github.com/ledgerwatch/erigon/params"
@@ -86,10 +85,11 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 			config.Validators = []libcommon.Address{libcommon.HexToAddress("b6f9153d2eD6A3C5898Eed762596dC8434964363"),
 				libcommon.HexToAddress("6703C8c1dfFD5644118b98F31cd883DD14Ad480b")}
 
-			log.Info(">>>>>>>>> IBFT key from hex file <<<<<<<<<<<<<<<")
+			nodekey := nodeConfig.P2P.PrivateKey
 			// nodeKey, _ := crypto.GenerateKey()
-			nodeKey, _ := crypto.HexToECDSA("4ac3de02645b1e7db8dbd738572c14e1af6b23ae2ed5927fe524bbe4ba4c157b")
-			return istanbulBackend.New(&config, nodeKey, db, ctx)
+			// nodeKey, _ := crypto.HexToECDSA("4ac3de02645b1e7db8dbd738572c14e1af6b23ae2ed5927fe524bbe4ba4c157b")
+			log.Info(">>>>>>>>> IBFT node key from configuration, nodekey: ", nodekey)
+			return istanbulBackend.New(&config, nodekey, db, ctx)
 		}
 		if chainConfig.Clique != nil {
 			logger.Info(">>>>>>>>>>>>>>>>>> chainConfig:", chainConfig, nil)
