@@ -633,6 +633,10 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		recents = bor.Recents
 		signatures = bor.Signatures
 	}
+
+	// if istanbul, ok := backend.engine.(istanbul.Backend); ok {
+	// 	istanbul.StartQBFTConsensus()
+	// }
 	// proof-of-work mining
 	mining := stagedsync.New(
 		stagedsync.MiningStages(backend.sentryCtx,

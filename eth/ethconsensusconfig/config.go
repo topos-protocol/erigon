@@ -89,7 +89,8 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 			// nodeKey, _ := crypto.GenerateKey()
 			// nodeKey, _ := crypto.HexToECDSA("4ac3de02645b1e7db8dbd738572c14e1af6b23ae2ed5927fe524bbe4ba4c157b")
 			log.Info(">>>>>>>>> IBFT node key from configuration, nodekey: ", nodekey)
-			return istanbulBackend.New(&config, nodekey, db, ctx)
+			backend := istanbulBackend.New(&config, nodekey, db, ctx)
+			return backend
 		}
 		if chainConfig.Clique != nil {
 			logger.Info(">>>>>>>>>>>>>>>>>> chainConfig:", chainConfig, nil)

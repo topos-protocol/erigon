@@ -47,6 +47,7 @@ func NewEngine(cfg *istanbul.Config, signer libcommon.Address, sign SignerFn) *E
 }
 
 func (e *Engine) Author(header *types.Header) (libcommon.Address, error) {
+	log.Info(">>>>>>>>> IBFT Author <<<<<<<<<<<<<<<")
 	// Retrieve the signature from the header extra-data
 	extra, err := types.ExtractIstanbulExtra(header)
 	if err != nil {
@@ -67,6 +68,7 @@ func (e *Engine) CommitHeader(header *types.Header, seals [][]byte, round *big.I
 }
 
 func (e *Engine) VerifyBlockProposal(chain consensus.ChainHeaderReader, block *types.Block, validators consensus.ValidatorSet) (time.Duration, error) {
+	log.Info(">>>>>>>>> IBFT VerifyBlockProposal <<<<<<<<<<<<<<<")
 	// check block body
 	txnHash := types.DeriveSha(block.Transactions())
 	if txnHash != block.Header().TxHash {
@@ -91,6 +93,7 @@ func (e *Engine) VerifyBlockProposal(chain consensus.ChainHeaderReader, block *t
 }
 
 func (e *Engine) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header, parents []*types.Header, validators consensus.ValidatorSet) error {
+	log.Info(">>>>>>>>> IBFT VerifyHeader <<<<<<<<<<<<<<<")
 	return e.verifyHeader(chain, header, parents, validators)
 }
 
@@ -248,6 +251,7 @@ func (e *Engine) verifyCommittedSeals(chain consensus.ChainHeaderReader, header 
 // }
 
 func (e *Engine) VerifyUncles(chain consensus.ChainReader, header *types.Header, uncles []*types.Header) error {
+	log.Info(">>>>>>>>> IBFT VerifyUncles <<<<<<<<<<<<<<<")
 	if len(uncles) > 0 {
 		return istanbulcommon.ErrInvalidUncleHash
 	}
@@ -257,6 +261,7 @@ func (e *Engine) VerifyUncles(chain consensus.ChainReader, header *types.Header,
 // VerifySeal checks whether the crypto seal on a header is valid according to
 // the consensus rules of the given engine.
 func (e *Engine) VerifySeal(chain consensus.ChainHeaderReader, header *types.Header, validators consensus.ValidatorSet) error {
+	log.Info(">>>>>>>>> IBFT VerifySeal <<<<<<<<<<<<<<<")
 	// get parent header and ensure the signer is in parent's validator set
 	number := header.Number.Uint64()
 	if number == 0 {
@@ -272,6 +277,7 @@ func (e *Engine) VerifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 }
 
 func (e *Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, validators consensus.ValidatorSet) error {
+	log.Info(">>>>>>>>> IBFT Prepare <<<<<<<<<<<<<<<")
 	header.Coinbase = libcommon.Address{}
 	header.Nonce = istanbulcommon.EmptyBlockNonce
 	header.MixDigest = types.IstanbulDigest
@@ -326,6 +332,7 @@ func (e *Engine) Finalize(config *chain.Config, header *types.Header, state *sta
 	txs types.Transactions, uncles []*types.Header, r types.Receipts, withdrawals []*types.Withdrawal,
 	chain consensus.ChainReader, syscall consensus.SystemCall, logger log.Logger,
 ) (types.Transactions, types.Receipts, error) {
+	logger.Info(">>>>>>>>> IBFT Finalize <<<<<<<<<<<<<<<")
 	// No block rewards in Istanbul, so the state remains as is and uncles are dropped
 	// TODO Check if we need to update the state
 	// header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
@@ -354,6 +361,7 @@ func (e *Engine) FinalizeAndAssemble(chainConfig *chain.Config, header *types.He
 	txs types.Transactions, uncles []*types.Header, receipts types.Receipts, withdrawals []*types.Withdrawal,
 	chain consensus.ChainReader, syscall consensus.SystemCall, call consensus.Call, logger log.Logger,
 ) (*types.Block, types.Transactions, types.Receipts, error) {
+	logger.Info(">>>>>>>>> IBFT FinalizeAndAssemble <<<<<<<<<<<<<<<")
 
 	/// No block rewards in Istanbul, so the state remains as is and uncles are dropped
 	// TODO Check if we need to update the state
@@ -383,6 +391,7 @@ func (c *Engine) Type() chain.ConsensusName {
 // Seal generates a new block for the given input block with the local miner's
 // seal place on top.
 func (e *Engine) Seal(chain consensus.ChainHeaderReader, block *types.Block, validators consensus.ValidatorSet) (*types.Block, error) {
+	log.Info(">>>>>>>>> IBFT Seal <<<<<<<<<<<<<<<")
 	// update the block header timestamp and signature and propose the block to core engine
 	header := block.Header()
 	number := header.Number.Uint64()
@@ -439,6 +448,7 @@ func writeSeal(h *types.Header, seal []byte) error {
 }
 
 func (e *Engine) SealHash(header *types.Header) common.Hash {
+	log.Info(">>>>>>>>> IBFT SealHash <<<<<<<<<<<<<<<")
 	return sigHash(header)
 }
 
@@ -466,6 +476,7 @@ func (e *Engine) ExtractGenesisValidators(header *types.Header) ([]libcommon.Add
 }
 
 func (e *Engine) Signers(header *types.Header) ([]libcommon.Address, error) {
+	log.Info(">>>>>>>>> IBFT Signers <<<<<<<<<<<<<<<")
 	extra, err := types.ExtractIstanbulExtra(header)
 	if err != nil {
 		return []libcommon.Address{}, err
@@ -492,6 +503,7 @@ func (e *Engine) Address() libcommon.Address {
 }
 
 func (e *Engine) WriteVote(header *types.Header, candidate libcommon.Address, authorize bool) error {
+	log.Info(">>>>>>>>> IBFT WriteVote <<<<<<<<<<<<<<<")
 	header.Coinbase = candidate
 	if authorize {
 		copy(header.Nonce[:], nonceAuthVote)
@@ -503,6 +515,7 @@ func (e *Engine) WriteVote(header *types.Header, candidate libcommon.Address, au
 }
 
 func (e *Engine) ReadVote(header *types.Header) (candidate libcommon.Address, authorize bool, err error) {
+	log.Info(">>>>>>>>> IBFT ReadVote <<<<<<<<<<<<<<<")
 	switch {
 	case bytes.Equal(header.Nonce[:], nonceAuthVote):
 		authorize = true
@@ -584,6 +597,7 @@ func writeCommittedSeals(h *types.Header, committedSeals [][]byte) error {
 
 // PrepareCommittedSeal returns a committed seal for the given hash
 func PrepareCommittedSeal(hash common.Hash) []byte {
+	log.Info(">>>>>>>>> IBFT PrepareCommittedSeal <<<<<<<<<<<<<<<")
 	var buf bytes.Buffer
 	buf.Write(hash.Bytes())
 	buf.Write([]byte{byte(ibfttypes.MsgCommit)})

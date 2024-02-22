@@ -51,6 +51,7 @@ const (
 // block, which may be different from the header's coinbase if a consensus
 // engine is based on signatures.
 func (sb *Backend) Author(header *types.Header) (libcommon.Address, error) {
+	log.Info(">>>>>>>>> Istanbul Author <<<<<<<<<<<<<<<")
 	return sb.EngineForBlockNumber(header.Number).Author(header)
 }
 
@@ -85,6 +86,7 @@ func (sb *Backend) verifyHeader(chain consensus.ChainHeaderReader, header *types
 // a results channel to retrieve the async verifications (the order is that of
 // the input slice).
 func (sb *Backend) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header, seals []bool) (chan<- struct{}, <-chan error) {
+	log.Info(">>>>>>>>> Istanbul VerifyHeaders <<<<<<<<<<<<<<<")
 	abort := make(chan struct{})
 	results := make(chan error, len(headers))
 	go func() {
@@ -133,6 +135,14 @@ func (sb *Backend) VerifySeal(chain consensus.ChainHeaderReader, header *types.H
 // Prepare initializes the consensus fields of a block header according to the
 // rules of a particular engine. The changes are executed inline.
 func (sb *Backend) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, validators consensus.ValidatorSet) error {
+	if !sb.initialized {
+		log.Info(">>>>>>>>> SB current block: ", sb.currentBlock, nil)
+		err := sb.Start(chain, sb.currentBlock, nil)
+		if err != nil {
+			log.Info(">>>>>>>>> ERROR STARTING ISTANBUL PROTOCOL")
+		}
+		sb.initialized = true
+	}
 	log.Info(">>>>>>>>> Istanbul Prepare <<<<<<<<<<<<<<<")
 	// Assemble the voting snapshot
 	snap, err := sb.snapshot(chain, header.Number.Uint64()-1, header.ParentHash, nil)
@@ -215,6 +225,7 @@ func (sb *Backend) Type() chain.ConsensusName {
 // VerifyUncles implements consensus.Engine, always returning an error for any
 // uncles as this consensus mechanism doesn't permit uncles.
 func (sb *Backend) VerifyUncles(chain consensus.ChainReader, header *types.Header, uncles []*types.Header) error {
+	log.Info(">>>>>>>>> Istanbul VerifyHeaders <<<<<<<<<<<<<<<")
 	if len(uncles) > 0 {
 		return errors.New("uncles not allowed")
 	}
@@ -293,6 +304,7 @@ func (sb *Backend) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 
 // Start implements consensus.Istanbul.Start
 func (sb *Backend) Start(chain consensus.ChainHeaderReader, currentBlock func() *types.Block, hasBadBlock func(db kv.RwDB, hash libcommon.Hash) bool) error {
+	log.Info(">>>>>>>>> Istanbul Start <<<<<<<<<<<<<<<")
 	sb.coreMu.Lock()
 	defer sb.coreMu.Unlock()
 	if sb.coreStarted {
@@ -331,6 +343,7 @@ func (sb *Backend) Start(chain consensus.ChainHeaderReader, currentBlock func() 
 
 // Stop implements consensus.Istanbul.Stop
 func (sb *Backend) Stop() error {
+	log.Info(">>>>>>>>> Istanbul Stop <<<<<<<<<<<<<<<")
 	sb.coreMu.Lock()
 	defer sb.coreMu.Unlock()
 	if !sb.coreStarted {
@@ -536,6 +549,7 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 
 // SealHash returns the hash of a block prior to it being sealed.
 func (sb *Backend) SealHash(header *types.Header) libcommon.Hash {
+	log.Info(">>>>>>>>> Istanbul SealHash <<<<<<<<<<<<<<<")
 	return sb.EngineForBlockNumber(header.Number).SealHash(header)
 }
 
@@ -569,6 +583,7 @@ func (sb *Backend) snapApply(snap *Snapshot, headers []*types.Header) (*Snapshot
 }
 
 func (sb *Backend) snapApplyHeader(snap *Snapshot, header *types.Header) error {
+	log.Info(">>>>>>>>> Istanbul snapApplyHeader <<<<<<<<<<<<<<<")
 	logger := sb.snapLogger(snap).New("header.number", header.Number.Uint64(), "header.hash", header.Hash().String())
 
 	logger.Trace("BFT: apply header to voting snapshot")

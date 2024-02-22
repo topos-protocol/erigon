@@ -70,6 +70,7 @@ func New(config *istanbul.Config, privateKey *ecdsa.PrivateKey, db kv.RwDB, ctx 
 		coreStarted:      false,
 		recentMessages:   recentMessages,
 		knownMessages:    knownMessages,
+		initialized:      false,
 	}
 
 	sb.qbftEngine = qbftengine.NewEngine(sb.config, sb.address, sb.Sign)
@@ -123,6 +124,8 @@ type Backend struct {
 	knownMessages  *lru.ARCCache // the cache of self messages
 
 	qbftConsensusEnabled bool // qbft consensus
+
+	initialized bool
 }
 
 func (sb *Backend) Engine() istanbul.Engine {
