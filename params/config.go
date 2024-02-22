@@ -122,6 +122,24 @@ var (
 		Clique:                &chain.CliqueConfig{Period: 0, Epoch: 30000},
 	}
 
+	AllIstanbulProtocolChanges = &chain.Config{
+		ChainID:               big.NewInt(1337),
+		Consensus:             chain.IstanbulConsensus,
+		HomesteadBlock:        big.NewInt(0),
+		TangerineWhistleBlock: big.NewInt(0),
+		SpuriousDragonBlock:   big.NewInt(0),
+		ByzantiumBlock:        big.NewInt(0),
+		ConstantinopleBlock:   big.NewInt(0),
+		PetersburgBlock:       big.NewInt(0),
+		IstanbulBlock:         big.NewInt(0),
+		MuirGlacierBlock:      big.NewInt(0),
+		BerlinBlock:           big.NewInt(0),
+		LondonBlock:           big.NewInt(0),
+		ShanghaiTime:          big.NewInt(0),
+		Clique:                nil,
+		Istanbul:              &chain.IstanbulConfig{Epoch: 30000},
+	}
+
 	MumbaiChainConfig = readChainSpec("chainspecs/mumbai.json")
 
 	BorMainnetChainConfig = readChainSpec("chainspecs/bor-mainnet.json")

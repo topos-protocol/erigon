@@ -483,8 +483,8 @@ var DevnetSignKey = func(address libcommon.Address) *ecdsa.PrivateKey {
 func DeveloperGenesisBlock(period uint64, faucet libcommon.Address) *types.Genesis {
 	log.Info(">>>>>>>>>>>>>>>>>>>>>>>> DeveloperGenesisBlock here we set config")
 	// Override the default period to the user requested one
-	config := *params.AllCliqueProtocolChanges
-	config.Clique.Period = period
+	config := *params.AllIstanbulProtocolChanges
+	// config.Clique.Period = period
 
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
 	return &types.Genesis{

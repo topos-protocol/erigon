@@ -412,7 +412,7 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 		if number == 0 {
 			genesis := chain.GetHeaderByNumber(0)
 			if err := sb.EngineForBlockNumber(big.NewInt(0)).VerifyHeader(chain, genesis, nil, nil); err != nil {
-				sb.logger.Error("BFT: invalid genesis block", "err", err)
+				sb.logger.Error("BFT: invalid genesis block 1", "err", err)
 				return nil, err
 			}
 
@@ -445,7 +445,7 @@ func (sb *Backend) snapshot(chain consensus.ChainHeaderReader, number uint64, ha
 					validators, err = sb.EngineForBlockNumber(big.NewInt(0)).ExtractGenesisValidators(genesis)
 					log.Info("BFT: Initialising snap with extradata", "validators", validators)
 					if err != nil {
-						log.Error("BFT: invalid genesis block", "err", err)
+						log.Error("BFT: invalid genesis block 1", "err", err)
 						return nil, err
 					}
 				}

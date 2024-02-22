@@ -39,6 +39,7 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 
 	switch consensusCfg := config.(type) {
 	case *ethashcfg.Config:
+		logger.Info(">>>>>>>>>>>>>>>>>> CreateConsensusEngine checkpoint 1.1")
 		switch consensusCfg.PowMode {
 		case ethashcfg.ModeFake:
 			logger.Warn("Ethash used in fake mode")
@@ -80,6 +81,8 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 			config.Ceil2Nby3Block = chainConfig.Istanbul.Ceil2Nby3Block
 			// config.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
 			config.TestQBFTBlock = chainConfig.Istanbul.TestQBFTBlock
+			config.Transitions = []chain.Transition{}
+
 			log.Info(">>>>>>>>> IBFT random generated  key <<<<<<<<<<<<<<<")
 			nodeKey, _ := crypto.GenerateKey()
 			return istanbulBackend.New(&config, nodeKey, db)
@@ -146,6 +149,7 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 			eng = bor.New(chainConfig, db, blockReader, spanner, heimdallClient, genesisContractsClient, logger)
 		}
 	}
+	logger.Info(">>>>>>>>>>>>>>>>>> CreateConsensusEngine checkpoint 1.1")
 
 	if eng == nil {
 		panic("unknown config" + spew.Sdump(config))

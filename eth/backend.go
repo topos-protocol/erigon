@@ -504,7 +504,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 
 	if chainConfig.Istanbul != nil {
 		logger.Info(">>>>>>>>>>>>>>>>>>>>>> CONSENSUS CONFIG INSTANBUL")
-		consensusConfig = &config.Istanbul
+		consensusConfig = &config.Clique
 	} else if chainConfig.Clique != nil {
 		logger.Info(">>>>>>>>>>>>>>>>>>>>>> CONSENSUS CONFIG CLIQUE")
 		consensusConfig = &config.Clique
