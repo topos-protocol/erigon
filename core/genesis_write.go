@@ -17,6 +17,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"embed"
@@ -39,6 +40,8 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/kvcfg"
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
+	istanbulcommon "github.com/ledgerwatch/erigon/consensus/istanbul/common"
+	"github.com/ledgerwatch/erigon/rlp"
 
 	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
@@ -479,21 +482,48 @@ var DevnetSignKey = func(address libcommon.Address) *ecdsa.PrivateKey {
 	return DevnetSignPrivateKey
 }
 
+func appendValidatorsIstanbulExtra(genesis *types.Genesis, addrs []libcommon.Address) {
+	if len(genesis.ExtraData) < types.IstanbulExtraVanity {
+		genesis.ExtraData = append(genesis.ExtraData, bytes.Repeat([]byte{0x00}, types.IstanbulExtraVanity)...)
+	}
+	genesis.ExtraData = genesis.ExtraData[:types.IstanbulExtraVanity]
+
+	ist := &types.IstanbulExtra{
+		Validators:    addrs,
+		Seal:          []byte{},
+		CommittedSeal: [][]byte{},
+	}
+
+	istPayload, err := rlp.EncodeToBytes(&ist)
+	if err != nil {
+		panic("failed to encode istanbul extra")
+	}
+	genesis.ExtraData = append(genesis.ExtraData, istPayload...)
+}
+
 // DeveloperGenesisBlock returns the 'geth --dev' genesis block.
 func DeveloperGenesisBlock(period uint64, faucet libcommon.Address) *types.Genesis {
 	log.Info(">>>>>>>>>>>>>>>>>>>>>>>> DeveloperGenesisBlock here we set config")
 	// Override the default period to the user requested one
 	config := *params.AllIstanbulProtocolChanges
+	config.Ethash = nil
 	// config.Clique.Period = period
 
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
-	return &types.Genesis{
+	genesis := &types.Genesis{
 		Config:     &config,
 		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
 		GasLimit:   11500000,
-		Difficulty: big.NewInt(1),
-		Alloc:      readPrealloc("allocs/dev.json"),
+		Difficulty: istanbulcommon.DefaultDifficulty,
+
+		Nonce:   istanbulcommon.EmptyBlockNonce.Uint64(),
+		Mixhash: types.IstanbulDigest,
+		Alloc:   readPrealloc("allocs/dev.json"),
 	}
+	validators := []libcommon.Address{libcommon.HexToAddress("b6f9153d2eD6A3C5898Eed762596dC8434964363"),
+		libcommon.HexToAddress("6703C8c1dfFD5644118b98F31cd883DD14Ad480b")}
+	appendValidatorsIstanbulExtra(genesis, validators)
+	return genesis
 }
 
 // ToBlock creates the genesis block and writes state of a genesis specification

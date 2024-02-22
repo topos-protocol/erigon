@@ -9,6 +9,7 @@ import (
 
 	"github.com/ledgerwatch/erigon-lib/chain"
 
+	libcommon "github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/kv"
 	"github.com/ledgerwatch/erigon/consensus"
 	"github.com/ledgerwatch/erigon/consensus/aura"
@@ -82,9 +83,12 @@ func CreateConsensusEngine(ctx context.Context, nodeConfig *nodecfg.Config, chai
 			// config.AllowedFutureBlockTime = config.Miner.AllowedFutureBlockTime //Quorum
 			config.TestQBFTBlock = chainConfig.Istanbul.TestQBFTBlock
 			config.Transitions = []chain.Transition{}
+			config.Validators = []libcommon.Address{libcommon.HexToAddress("b6f9153d2eD6A3C5898Eed762596dC8434964363"),
+				libcommon.HexToAddress("6703C8c1dfFD5644118b98F31cd883DD14Ad480b")}
 
-			log.Info(">>>>>>>>> IBFT random generated  key <<<<<<<<<<<<<<<")
-			nodeKey, _ := crypto.GenerateKey()
+			log.Info(">>>>>>>>> IBFT key from hex file <<<<<<<<<<<<<<<")
+			// nodeKey, _ := crypto.GenerateKey()
+			nodeKey, _ := crypto.HexToECDSA("4ac3de02645b1e7db8dbd738572c14e1af6b23ae2ed5927fe524bbe4ba4c157b")
 			return istanbulBackend.New(&config, nodeKey, db)
 		}
 		if chainConfig.Clique != nil {
