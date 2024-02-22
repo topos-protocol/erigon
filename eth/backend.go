@@ -755,6 +755,10 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 				// will trigger the staged sync which will require headers and blocks to be available
 				// in their respective cache in the download stage. If not found, it would cause a
 				// liveness issue for the chain.
+				logger.Error(">>>>>>>>>>>>>>>>>>> CHECKPOINT 1, block: ", b, nil)
+				if b == nil {
+					continue
+				}
 				if err := backend.sentriesClient.Hd.AddMinedHeader(b.Header()); err != nil {
 					logger.Error("add mined block to header downloader", "err", err)
 				}
