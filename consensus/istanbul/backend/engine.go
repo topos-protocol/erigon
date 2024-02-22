@@ -366,7 +366,7 @@ func (sb *Backend) storeSnap(snap *Snapshot) error {
 	logger := sb.snapLogger(snap)
 	logger.Debug("BFT: store snapshot to database")
 
-	if err := sb.db.Update(context.Background(), func(s kv.RwTx) error {
+	if err := sb.db.Update(sb.ctx, func(s kv.RwTx) error {
 		if err := snap.store(s); err != nil {
 			logger.Error("BFT: failed to store snapshot to database", "err", err)
 			return err

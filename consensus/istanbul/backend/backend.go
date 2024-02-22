@@ -17,6 +17,7 @@
 package backend
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"math/big"
 	"sync"
@@ -49,7 +50,7 @@ const (
 )
 
 // New creates an Ethereum backend for Istanbul core engine.
-func New(config *istanbul.Config, privateKey *ecdsa.PrivateKey, db kv.RwDB) *Backend {
+func New(config *istanbul.Config, privateKey *ecdsa.PrivateKey, db kv.RwDB, ctx context.Context) *Backend {
 	// Allocate the snapshot caches and create the engine
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	recentMessages, _ := lru.NewARC(inmemoryPeers)
@@ -62,6 +63,7 @@ func New(config *istanbul.Config, privateKey *ecdsa.PrivateKey, db kv.RwDB) *Bac
 		address:          crypto.PubkeyToAddress(privateKey.PublicKey),
 		logger:           log.New(),
 		db:               db,
+		ctx:              ctx,
 		commitCh:         make(chan *types.Block, 1),
 		recents:          recents,
 		candidates:       make(map[libcommon.Address]bool),
@@ -93,7 +95,8 @@ type Backend struct {
 
 	logger log.Logger
 
-	db kv.RwDB
+	db  kv.RwDB
+	ctx context.Context
 
 	chain        consensus.ChainHeaderReader
 	currentBlock func() *types.Block

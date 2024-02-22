@@ -368,6 +368,9 @@ const (
 	BorEventNums = "BorEventNums"              // block_num -> event_id (first event_id in that block)
 	BorSpans     = "BorSpans"                  // span_id -> span (in JSON encoding)
 
+	// Istanbul
+	IstanbulSnapshot = "IstanbulSnapshot"
+
 	// Downloader
 	BittorrentCompletion = "BittorrentCompletion"
 	BittorrentInfo       = "BittorrentInfo"
@@ -563,6 +566,7 @@ var ChaindataTables = []string{
 	BorEvents,
 	BorEventNums,
 	BorSpans,
+	IstanbulSnapshot,
 	TblAccountKeys,
 	TblAccountVals,
 	TblAccountHistoryKeys,
