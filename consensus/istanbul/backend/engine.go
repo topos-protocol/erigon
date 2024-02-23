@@ -135,14 +135,14 @@ func (sb *Backend) VerifySeal(chain consensus.ChainHeaderReader, header *types.H
 // Prepare initializes the consensus fields of a block header according to the
 // rules of a particular engine. The changes are executed inline.
 func (sb *Backend) Prepare(chain consensus.ChainHeaderReader, header *types.Header, state *state.IntraBlockState, validators consensus.ValidatorSet) error {
-	if !sb.initialized {
-		log.Info(">>>>>>>>> SB current block: ", sb.currentBlock, nil)
-		err := sb.Start(chain, sb.currentBlock, nil)
-		if err != nil {
-			log.Info(">>>>>>>>> ERROR STARTING ISTANBUL PROTOCOL")
-		}
-		sb.initialized = true
-	}
+	// if !sb.initialized {
+	// 	log.Info(">>>>>>>>> SB current block: ", sb.genesisBlock, nil)
+	// 	err := sb.Start(chain, sb.genesisBlock, nil)
+	// 	if err != nil {
+	// 		log.Info(">>>>>>>>> ERROR STARTING ISTANBUL PROTOCOL")
+	// 	}
+	// 	sb.initialized = true
+	// }
 	log.Info(">>>>>>>>> Istanbul Prepare <<<<<<<<<<<<<<<")
 	// Assemble the voting snapshot
 	snap, err := sb.snapshot(chain, header.Number.Uint64()-1, header.ParentHash, nil)

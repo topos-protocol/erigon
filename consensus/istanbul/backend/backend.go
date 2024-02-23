@@ -100,6 +100,7 @@ type Backend struct {
 	ctx context.Context
 
 	chain        consensus.ChainHeaderReader
+	genesisBlock func() *types.Block
 	currentBlock func() *types.Block
 	hasBadBlock  func(db kv.RwDB, hash libcommon.Hash) bool
 

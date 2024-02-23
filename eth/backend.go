@@ -538,6 +538,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 		stateSync := stages2.NewInMemoryExecution(backend.sentryCtx, backend.chainDB, config, backend.sentriesClient,
 			dirs, notifications, blockReader, blockWriter, backend.agg, backend.silkworm, terseLogger)
 		chainReader := stagedsync.NewChainReaderImpl(chainConfig, batch, blockReader, logger)
+		logger.Info(">>>>>>>>>>>>>>>>>>>>>> IN MEMORY EXECUTION STARTED")
 		// We start the mining step
 		if err := stages2.StateStep(ctx, chainReader, backend.engine, batch, backend.blockWriter, stateSync, backend.sentriesClient.Bd, header, body, unwindPoint, headersChain, bodiesChain, config.HistoryV3); err != nil {
 			logger.Warn("Could not validate block", "err", err)
@@ -637,6 +638,7 @@ func New(ctx context.Context, stack *node.Node, config *ethconfig.Config, logger
 	// if istanbul, ok := backend.engine.(istanbul.Backend); ok {
 	// 	istanbul.StartQBFTConsensus()
 	// }
+
 	// proof-of-work mining
 	mining := stagedsync.New(
 		stagedsync.MiningStages(backend.sentryCtx,
