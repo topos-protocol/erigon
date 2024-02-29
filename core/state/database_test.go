@@ -19,9 +19,11 @@ package state_test
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"testing"
 
 	"github.com/holiman/uint256"
@@ -1298,6 +1300,45 @@ func TestCacheCodeSizeSeparately(t *testing.T) {
 	assert.Equal(t, code, code2, "new code should be received")
 }
 
+func TestGetStateFromWitness(t *testing.T) {
+	// Load a witness from a file
+	hexData, err := os.ReadFile("testdata/test_witness.hex")
+	if err != nil {
+		t.Fatalf("error reading witness: %v", err)
+	}
+
+	// Decode the hex data into bytes
+	decodedData, err := hex.DecodeString(string(hexData))
+	if err != nil {
+		t.Fatalf("error decoding witness: %v", err)
+	}
+
+	witness, err := trie.NewWitnessFromReader(bytes.NewReader(decodedData), false)
+
+	if err != nil {
+		t.Fatalf("error reading witness: %v", err)
+	}
+
+	s, err := state.NewStateless(libcommon.Hash{}, witness, 0, false, true)
+
+	if err != nil {
+		t.Fatalf("error creating state: %v", err)
+	}
+
+	ibs := state.New(s)
+
+	var value uint256.Int
+
+	sKey := libcommon.HexToHash("0x0")
+	ibs.GetState(libcommon.HexToAddress("0x85da99c8a7c2c95964c8efd687e95e632fc533d6"), &sKey, &value)
+
+	fmt.Printf("Slot %s value: %x\n", sKey.Hex(), value.Bytes20())
+
+	balance := ibs.GetBalance(libcommon.HexToAddress("0x85da99c8a7c2c95964c8efd687e95e632fc533d6"))
+
+	fmt.Printf("Balance: %s\n", balance)
+}
+
 func TestTDSWitness(t *testing.T) {
 	contract := libcommon.HexToAddress("0x71dd1027069078091B3ca48093B00E4735B20624")
 	sKey := libcommon.HexToHash("0x4321")
@@ -1305,7 +1346,7 @@ func TestTDSWitness(t *testing.T) {
 
 	_, tx := memdb.NewTestTx(t)
 
-	tds := state.NewTrieDbState(libcommon.Hash{}, tx, 0)
+	tds := state.NewTrieDbState(libcommon.Hash{}, tx, 0, nil)
 
 	w := tds.DbStateWriter()
 
