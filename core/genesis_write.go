@@ -40,7 +40,6 @@ import (
 	"github.com/ledgerwatch/erigon-lib/kv/mdbx"
 	"github.com/ledgerwatch/erigon-lib/kv/rawdbv3"
 
-	"github.com/ledgerwatch/erigon/common"
 	"github.com/ledgerwatch/erigon/consensus/ethash"
 	"github.com/ledgerwatch/erigon/consensus/merge"
 	"github.com/ledgerwatch/erigon/core/rawdb"
@@ -447,9 +446,9 @@ func BorDevnetGenesisBlock() *types.Genesis {
 
 func GnosisGenesisBlock() *types.Genesis {
 	return &types.Genesis{
-		Config:     params.GnosisChainConfig,
-		Timestamp:  0,
-		AuRaSeal:   common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		Config:    params.GnosisChainConfig,
+		Timestamp: 0,
+		// AuRaSeal:   common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
 		GasLimit:   0x989680,
 		Difficulty: big.NewInt(0x20000),
 		Alloc:      readPrealloc("allocs/gnosis.json"),
@@ -458,9 +457,9 @@ func GnosisGenesisBlock() *types.Genesis {
 
 func ChiadoGenesisBlock() *types.Genesis {
 	return &types.Genesis{
-		Config:     params.ChiadoChainConfig,
-		Timestamp:  0,
-		AuRaSeal:   common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		Config:    params.ChiadoChainConfig,
+		Timestamp: 0,
+		// AuRaSeal:   common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
 		GasLimit:   0x989680,
 		Difficulty: big.NewInt(0x20000),
 		Alloc:      readPrealloc("allocs/chiado.json"),
@@ -503,21 +502,21 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 	_ = g.Alloc //nil-check
 
 	head := &types.Header{
-		Number:        new(big.Int).SetUint64(g.Number),
-		Nonce:         types.EncodeNonce(g.Nonce),
-		Time:          g.Timestamp,
-		ParentHash:    g.ParentHash,
-		Extra:         g.ExtraData,
-		GasLimit:      g.GasLimit,
-		GasUsed:       g.GasUsed,
-		Difficulty:    g.Difficulty,
-		MixDigest:     g.Mixhash,
-		Coinbase:      g.Coinbase,
-		BaseFee:       g.BaseFee,
-		BlobGasUsed:   g.BlobGasUsed,
-		ExcessBlobGas: g.ExcessBlobGas,
-		AuRaStep:      g.AuRaStep,
-		AuRaSeal:      g.AuRaSeal,
+		Number:     new(big.Int).SetUint64(g.Number),
+		Nonce:      types.EncodeNonce(g.Nonce),
+		Time:       g.Timestamp,
+		ParentHash: g.ParentHash,
+		Extra:      g.ExtraData,
+		GasLimit:   g.GasLimit,
+		GasUsed:    g.GasUsed,
+		Difficulty: g.Difficulty,
+		MixDigest:  g.Mixhash,
+		Coinbase:   g.Coinbase,
+		// BaseFee:       g.BaseFee,
+		// BlobGasUsed:   g.BlobGasUsed,
+		// ExcessBlobGas: g.ExcessBlobGas,
+		// AuRaStep:      g.AuRaStep,
+		// AuRaSeal:      g.AuRaSeal,
 	}
 	if g.GasLimit == 0 {
 		head.GasLimit = params.GenesisGasLimit
@@ -526,11 +525,11 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 		head.Difficulty = params.GenesisDifficulty
 	}
 	if g.Config != nil && g.Config.IsLondon(0) {
-		if g.BaseFee != nil {
-			head.BaseFee = g.BaseFee
-		} else {
-			head.BaseFee = new(big.Int).SetUint64(params.InitialBaseFee)
-		}
+		// if g.BaseFee != nil {
+		// 	head.BaseFee = g.BaseFee
+		// } else {
+		// 	head.BaseFee = new(big.Int).SetUint64(params.InitialBaseFee)
+		// }
 	}
 
 	var withdrawals []*types.Withdrawal
@@ -539,21 +538,21 @@ func GenesisToBlock(g *types.Genesis, tmpDir string, logger log.Logger) (*types.
 	}
 
 	if g.Config != nil && g.Config.IsCancun(g.Timestamp) {
-		if g.BlobGasUsed != nil {
-			head.BlobGasUsed = g.BlobGasUsed
-		} else {
-			head.BlobGasUsed = new(uint64)
-		}
-		if g.ExcessBlobGas != nil {
-			head.ExcessBlobGas = g.ExcessBlobGas
-		} else {
-			head.ExcessBlobGas = new(uint64)
-		}
-		if g.ParentBeaconBlockRoot != nil {
-			head.ParentBeaconBlockRoot = g.ParentBeaconBlockRoot
-		} else {
-			head.ParentBeaconBlockRoot = &libcommon.Hash{}
-		}
+		// if g.BlobGasUsed != nil {
+		// 	head.BlobGasUsed = g.BlobGasUsed
+		// } else {
+		// 	head.BlobGasUsed = new(uint64)
+		// }
+		// if g.ExcessBlobGas != nil {
+		// 	head.ExcessBlobGas = g.ExcessBlobGas
+		// } else {
+		// 	head.ExcessBlobGas = new(uint64)
+		// }
+		// if g.ParentBeaconBlockRoot != nil {
+		// 	head.ParentBeaconBlockRoot = g.ParentBeaconBlockRoot
+		// } else {
+		// 	head.ParentBeaconBlockRoot = &libcommon.Hash{}
+		// }
 	}
 
 	var root libcommon.Hash

@@ -47,18 +47,18 @@ func (g Genesis) MarshalJSON() ([]byte, error) {
 	enc.Difficulty = (*math.HexOrDecimal256)(g.Difficulty)
 	enc.Mixhash = g.Mixhash
 	enc.Coinbase = g.Coinbase
-	enc.BaseFee = (*math.HexOrDecimal256)(g.BaseFee)
-	enc.BlobGasUsed = (*math.HexOrDecimal64)(g.BlobGasUsed)
-	enc.ExcessBlobGas = (*math.HexOrDecimal64)(g.ExcessBlobGas)
+	// enc.BaseFee = (*math.HexOrDecimal256)(g.BaseFee)
+	// enc.BlobGasUsed = (*math.HexOrDecimal64)(g.BlobGasUsed)
+	// enc.ExcessBlobGas = (*math.HexOrDecimal64)(g.ExcessBlobGas)
 	if g.Alloc != nil {
 		enc.Alloc = make(map[common0.UnprefixedAddress]GenesisAccount, len(g.Alloc))
 		for k, v := range g.Alloc {
 			enc.Alloc[common0.UnprefixedAddress(k)] = v
 		}
 	}
-	enc.AuRaStep = g.AuRaStep
-	enc.AuRaSeal = g.AuRaSeal
-	enc.ParentBeaconBlockRoot = g.ParentBeaconBlockRoot
+	// enc.AuRaStep = g.AuRaStep
+	// enc.AuRaSeal = g.AuRaSeal
+	// enc.ParentBeaconBlockRoot = g.ParentBeaconBlockRoot
 	enc.Number = math.HexOrDecimal64(g.Number)
 	enc.GasUsed = math.HexOrDecimal64(g.GasUsed)
 	enc.ParentHash = g.ParentHash
@@ -117,15 +117,15 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 	if dec.Coinbase != nil {
 		g.Coinbase = *dec.Coinbase
 	}
-	if dec.BaseFee != nil {
-		g.BaseFee = (*big.Int)(dec.BaseFee)
-	}
-	if dec.BlobGasUsed != nil {
-		g.BlobGasUsed = (*uint64)(dec.BlobGasUsed)
-	}
-	if dec.ExcessBlobGas != nil {
-		g.ExcessBlobGas = (*uint64)(dec.ExcessBlobGas)
-	}
+	// if dec.BaseFee != nil {
+	// 	g.BaseFee = (*big.Int)(dec.BaseFee)
+	// }
+	// if dec.BlobGasUsed != nil {
+	// 	g.BlobGasUsed = (*uint64)(dec.BlobGasUsed)
+	// }
+	// if dec.ExcessBlobGas != nil {
+	// 	g.ExcessBlobGas = (*uint64)(dec.ExcessBlobGas)
+	// }
 	if dec.Alloc == nil {
 		return errors.New("missing required field 'alloc' for Genesis")
 	}
@@ -133,15 +133,15 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 	for k, v := range dec.Alloc {
 		g.Alloc[common.Address(k)] = v
 	}
-	if dec.AuRaStep != nil {
-		g.AuRaStep = *dec.AuRaStep
-	}
-	if dec.AuRaSeal != nil {
-		g.AuRaSeal = dec.AuRaSeal
-	}
-	if dec.ParentBeaconBlockRoot != nil {
-		g.ParentBeaconBlockRoot = dec.ParentBeaconBlockRoot
-	}
+	// if dec.AuRaStep != nil {
+	// 	g.AuRaStep = *dec.AuRaStep
+	// }
+	// if dec.AuRaSeal != nil {
+	// 	g.AuRaSeal = dec.AuRaSeal
+	// }
+	// if dec.ParentBeaconBlockRoot != nil {
+	// 	g.ParentBeaconBlockRoot = dec.ParentBeaconBlockRoot
+	// }
 	if dec.Number != nil {
 		g.Number = uint64(*dec.Number)
 	}

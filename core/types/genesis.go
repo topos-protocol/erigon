@@ -51,8 +51,8 @@ type Genesis struct {
 	Coinbase   common.Address `json:"coinbase"`
 	Alloc      GenesisAlloc   `json:"alloc"      gencodec:"required"`
 
-	AuRaStep uint64 `json:"auRaStep"`
-	AuRaSeal []byte `json:"auRaSeal"`
+	// AuRaStep uint64 `json:"auRaStep"`
+	// AuRaSeal []byte `json:"auRaSeal"`
 
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
@@ -61,10 +61,10 @@ type Genesis struct {
 	ParentHash common.Hash `json:"parentHash"`
 
 	// Header fields added in London and later hard forks
-	BaseFee               *big.Int     `json:"baseFeePerGas"`         // EIP-1559
-	BlobGasUsed           *uint64      `json:"blobGasUsed"`           // EIP-4844
-	ExcessBlobGas         *uint64      `json:"excessBlobGas"`         // EIP-4844
-	ParentBeaconBlockRoot *common.Hash `json:"parentBeaconBlockRoot"` // EIP-4788
+	// BaseFee               *big.Int     `json:"baseFeePerGas"`         // EIP-1559
+	// BlobGasUsed           *uint64      `json:"blobGasUsed"`           // EIP-4844
+	// ExcessBlobGas         *uint64      `json:"excessBlobGas"`         // EIP-4844
+	// ParentBeaconBlockRoot *common.Hash `json:"parentBeaconBlockRoot"` // EIP-4788
 }
 
 // GenesisAlloc specifies the initial state that is part of the genesis block.
