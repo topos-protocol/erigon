@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 
+	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 
 	"github.com/holiman/uint256"
@@ -36,6 +38,7 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
 	"github.com/ledgerwatch/erigon/turbo/trie"
+	"github.com/ledgerwatch/erigon/visual"
 )
 
 var latestNumOrHash = rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
@@ -407,10 +410,14 @@ func (api *APIImpl) GetProof(ctx context.Context, address libcommon.Address, sto
 }
 
 func (api *APIImpl) GetWitness(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (hexutility.Bytes, error) {
-	return api.getWitness(ctx, api.db, blockNrOrHash, api.MaxGetProofRewindBlockCount, api.logger)
+	return api.getWitness(ctx, api.db, blockNrOrHash, 0, true, api.MaxGetProofRewindBlockCount, api.logger)
 }
 
-func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, maxGetProofRewindBlockCount int, logger log.Logger) (hexutility.Bytes, error) {
+func (api *APIImpl) GetTxWitness(ctx context.Context, blockNr rpc.BlockNumberOrHash, txIndex hexutil.Uint) (hexutility.Bytes, error) {
+	return api.getWitness(ctx, api.db, blockNr, txIndex, false, api.MaxGetProofRewindBlockCount, api.logger)
+}
+
+func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rpc.BlockNumberOrHash, txIndex hexutil.Uint, fullBlock bool, maxGetProofRewindBlockCount int, logger log.Logger) (hexutility.Bytes, error) {
 	tx, err := db.BeginRo(ctx)
 	if err != nil {
 		return nil, err
@@ -445,6 +452,10 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 	}
 	if block == nil {
 		return nil, nil
+	}
+
+	if !fullBlock && int(txIndex) >= len(block.Transactions()) {
+		return nil, fmt.Errorf("transaction index out of bounds")
 	}
 
 	prevHeader, err := api._blockReader.HeaderByNumber(ctx, tx, blockNr-1)
@@ -551,27 +562,6 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 
 	vmConfig := vm.Config{}
 
-	for i, txn := range block.Transactions() {
-		statedb.SetTxContext(txn.Hash(), block.Hash(), i)
-		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, api.engine(), nil, gp, statedb, trieStateWriter, block.Header(), txn, usedGas, usedBlobGas, vmConfig)
-		if err != nil {
-			return nil, err
-		}
-
-		if !chainConfig.IsByzantium(block.NumberU64()) {
-			tds.StartNewBuffer()
-		}
-
-		receipts = append(receipts, receipt)
-	}
-
-	if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
-		fmt.Printf("Finalize of block %d failed: %v\n", blockNr, err)
-		return nil, err
-	}
-
-	statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), block.Header().Time), trieStateWriter)
-
 	loadFunc := func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int, accountNibbles [][]byte) (trie.SubTries, error) {
 		rl.Rewind()
 		receiver := trie.NewSubTrieAggregator(nil, nil, false)
@@ -608,9 +598,50 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		return subTries, nil
 	}
 
+	for i, txn := range block.Transactions() {
+		statedb.SetTxContext(txn.Hash(), block.Hash(), i)
+
+		if !fullBlock && i == int(txIndex) && txIndex > 0 {
+			err = tds.ResolveStateTrieWithFunc(loadFunc)
+			if err != nil {
+				panic(err)
+			}
+			_, err = tds.UpdateStateTrie()
+
+			if err != nil {
+				panic(err)
+			}
+			tds.StartNewBuffer()
+		}
+
+		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, api.engine(), nil, gp, statedb, trieStateWriter, block.Header(), txn, usedGas, usedBlobGas, vmConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		if !fullBlock && i == int(txIndex) {
+			break
+		}
+
+		if !chainConfig.IsByzantium(block.NumberU64()) {
+			tds.StartNewBuffer()
+		}
+
+		receipts = append(receipts, receipt)
+	}
+
+	if fullBlock || (int(txIndex) == len(block.Transactions())-1) {
+		if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
+			fmt.Printf("Finalize of block %d failed: %v\n", blockNr, err)
+			return nil, err
+		}
+
+		statedb.FinalizeTx(chainConfig.Rules(block.NumberU64(), block.Header().Time), trieStateWriter)
+	}
+
 	triePreroot := tds.LastRoot()
 
-	if !bytes.Equal(prevHeader.Root[:], triePreroot[:]) {
+	if fullBlock && !bytes.Equal(prevHeader.Root[:], triePreroot[:]) {
 		return nil, fmt.Errorf("mismatch in expected state root computed %v vs %v indicates bug in witness implementation", prevHeader.Root, triePreroot)
 	}
 
@@ -628,6 +659,46 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 	_, err = w.WriteInto(&buf)
 	if err != nil {
 		return nil, err
+	}
+
+	if !fullBlock {
+		filename := fmt.Sprintf("state_%d.dot", blockNr)
+		f, err := os.Create(filename)
+		if err != nil {
+			return nil, err
+		}
+		indexColors := visual.HexIndexColors
+		fontColors := visual.HexFontColors
+		visual.StartGraph(f, false)
+
+		targetAccount := libcommon.HexToAddress("0xba386a4ca26b85fd057ab1ef86e3dc7bdeb5ce70")
+		accountHash, err := common.HashData(targetAccount[:])
+
+		if err != nil {
+			return nil, err
+		}
+
+		node, found := tds.Trie().GetAccountStorage(accountHash[:])
+
+		if !found {
+			return nil, fmt.Errorf("account %s not found", targetAccount.String())
+		}
+
+		trie.VisualNode(*node, f, &trie.VisualOpts{
+			Highlights:     nil,
+			IndexColors:    indexColors,
+			FontColors:     fontColors,
+			Values:         true,
+			CutTerminals:   0,
+			CodeCompressed: false,
+			ValCompressed:  false,
+			ValHex:         true,
+		})
+		visual.EndGraph(f)
+		if err := f.Close(); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
 	}
 
 	nw, err := trie.NewWitnessFromReader(bytes.NewReader(buf.Bytes()), false)
