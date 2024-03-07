@@ -112,6 +112,45 @@ type Header struct {
 	VerkleKeyVals []verkle.KeyValuePair
 }
 
+// Header represents a block header in the Ethereum blockchain.
+type HeaderQourum struct {
+	ParentHash  libcommon.Hash    `json:"parentHash"       gencodec:"required"`
+	UncleHash   libcommon.Hash    `json:"sha3Uncles"       gencodec:"required"`
+	Coinbase    libcommon.Address `json:"miner"            gencodec:"required"`
+	Root        libcommon.Hash    `json:"stateRoot"        gencodec:"required"`
+	TxHash      libcommon.Hash    `json:"transactionsRoot" gencodec:"required"`
+	ReceiptHash libcommon.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	Bloom       Bloom             `json:"logsBloom"        gencodec:"required"`
+	Difficulty  *big.Int          `json:"difficulty"       gencodec:"required"`
+	Number      *big.Int          `json:"number"           gencodec:"required"`
+	GasLimit    uint64            `json:"gasLimit"         gencodec:"required"`
+	GasUsed     uint64            `json:"gasUsed"          gencodec:"required"`
+	Time        uint64            `json:"timestamp"        gencodec:"required"`
+	Extra       []byte            `json:"extraData"        gencodec:"required"`
+	MixDigest   libcommon.Hash    `json:"mixHash"`
+	Nonce       BlockNonce        `json:"nonce"`
+}
+
+func (h *Header) ToHeaderQuorum() *HeaderQourum {
+	return &HeaderQourum{
+		ParentHash:  h.ParentHash,
+		UncleHash:   h.UncleHash,
+		Coinbase:    h.Coinbase,
+		Root:        h.Root,
+		TxHash:      h.TxHash,
+		ReceiptHash: h.ReceiptHash,
+		Bloom:       h.Bloom,
+		Difficulty:  h.Difficulty,
+		Number:      h.Number,
+		GasLimit:    h.GasLimit,
+		GasUsed:     h.GasUsed,
+		Time:        h.Time,
+		Extra:       h.Extra,
+		MixDigest:   h.MixDigest,
+		Nonce:       h.Nonce,
+	}
+}
+
 func (h *Header) EncodingSize() int {
 	encodingSize := 33 /* ParentHash */ + 33 /* UncleHash */ + 21 /* Coinbase */ + 33 /* Root */ + 33 /* TxHash */ +
 		33 /* ReceiptHash */ + 259 /* Bloom */
@@ -533,7 +572,8 @@ type headerMarshaling struct {
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
 // RLP encoding.
 func (h *Header) Hash() libcommon.Hash {
-	return rlpHash(h)
+	headerQuorum := h.ToHeaderQuorum()
+	return rlpHash(&headerQuorum)
 }
 
 var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
