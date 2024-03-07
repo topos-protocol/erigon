@@ -264,16 +264,16 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		return err
 	}
 	// Verify the block's difficulty based on its timestamp and parent's difficulty
-	expected := ethash.CalcDifficulty(chain, header.Time, parent.Time, parent.Difficulty, parent.Number.Uint64(), parent.Hash(), parent.UncleHash, parent.AuRaStep)
-	if expected.Cmp(header.Difficulty) != 0 {
-		return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
-	}
-	// Verify the engine specific seal securing the block
-	if seal {
-		if err := ethash.VerifySeal(nil, header); err != nil {
-			return err
-		}
-	}
+	// expected := ethash.CalcDifficulty(chain, header.Time, parent.Time, parent.Difficulty, parent.Number.Uint64(), parent.Hash(), parent.UncleHash, parent.AuRaStep)
+	// if expected.Cmp(header.Difficulty) != 0 {
+	// 	return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty, expected)
+	// }
+	// // Verify the engine specific seal securing the block
+	// if seal {
+	// 	if err := ethash.VerifySeal(nil, header); err != nil {
+	// 		return err
+	// 	}
+	// }
 	return nil
 }
 
