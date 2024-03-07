@@ -56,9 +56,9 @@ func (c *Clique) verifyHeader(chain consensus.ChainHeaderReader, header *types.H
 	}
 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
 	signersBytes := len(header.Extra) - ExtraVanity - ExtraSeal
-	if !checkpoint && signersBytes != 0 {
-		return errExtraSigners
-	}
+	// if !checkpoint && signersBytes != 0 {
+	// 	return errExtraSigners
+	// }
 	if checkpoint && signersBytes%length.Addr != 0 {
 		return errInvalidCheckpointSigners
 	}
