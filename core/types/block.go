@@ -135,7 +135,7 @@ func (h *Header) ToHeaderQuorum() *HeaderQourum {
 	return &HeaderQourum{
 		ParentHash:  h.ParentHash,
 		UncleHash:   h.UncleHash,
-		Coinbase:    h.Coinbase,
+		Coinbase:    libcommon.Address{},
 		Root:        h.Root,
 		TxHash:      h.TxHash,
 		ReceiptHash: h.ReceiptHash,
@@ -149,6 +149,73 @@ func (h *Header) ToHeaderQuorum() *HeaderQourum {
 		MixDigest:   h.MixDigest,
 		Nonce:       h.Nonce,
 	}
+}
+
+var (
+	// IstanbulDigest represents a hash of "Istanbul practical byzantine fault tolerance"
+	// to identify whether the block is from Istanbul consensus engine
+	IstanbulDigest = libcommon.HexToHash("0x63746963616c2062797a616e74696e65206661756c7420746f6c6572616e6365")
+
+	IstanbulExtraVanity = 32 // Fixed number of extra-data bytes reserved for validator vanity
+	IstanbulExtraSeal   = 65 // Fixed number of extra-data bytes reserved for validator seal
+
+	// ErrInvalidIstanbulHeaderExtra is returned if the length of extra-data is less than 32 bytes
+	ErrInvalidIstanbulHeaderExtra = errors.New("invalid istanbul header extra-data")
+)
+
+// IstanbulExtra represents the legacy IBFT header extradata
+type IstanbulExtra struct {
+	Validators    []libcommon.Address
+	Seal          []byte
+	CommittedSeal [][]byte
+}
+
+// ExtractIstanbulExtra extracts all values of the IstanbulExtra from the header. It returns an
+// error if the length of the given extra-data is less than 32 bytes or the extra-data can not
+// be decoded.
+func ExtractIstanbulExtra(h *Header) (*IstanbulExtra, error) {
+	if len(h.Extra) < IstanbulExtraVanity {
+		return nil, ErrInvalidIstanbulHeaderExtra
+	}
+
+	var istanbulExtra *IstanbulExtra
+	err := rlp.DecodeBytes(h.Extra[IstanbulExtraVanity:], &istanbulExtra)
+	if err != nil {
+		return nil, err
+	}
+	return istanbulExtra, nil
+}
+
+// IstanbulFilteredHeader returns a filtered header which some information (like seal, committed seals)
+// are clean to fulfill the Istanbul hash rules. It returns nil if the extra-data cannot be
+// decoded/encoded by rlp.
+func IstanbulFilteredHeader(h *Header, keepSeal bool) *Header {
+	newHeader := CopyHeader(h)
+	istanbulExtra, err := ExtractIstanbulExtra(newHeader)
+	if err != nil {
+		return nil
+	}
+
+	if !keepSeal {
+		istanbulExtra.Seal = []byte{}
+	}
+	istanbulExtra.CommittedSeal = [][]byte{}
+
+	payload, err := rlp.EncodeToBytes(&istanbulExtra)
+	if err != nil {
+		return nil
+	}
+
+	newHeader.Extra = append(newHeader.Extra[:IstanbulExtraVanity], payload...)
+
+	return newHeader
+}
+
+// FilteredHeader returns a filtered header which some information (like seal, committed seals)
+// are clean to fulfill the Istanbul hash rules. It first check if the extradata can be extracted into IstanbulExtra if that fails,
+// it extracts extradata into QBFTExtra struct
+func FilteredHeader(h *Header) *Header {
+	return IstanbulFilteredHeader(h, true)
 }
 
 func (h *Header) EncodingSize() int {
@@ -573,7 +640,23 @@ type headerMarshaling struct {
 // RLP encoding.
 func (h *Header) Hash() libcommon.Hash {
 	headerQuorum := h.ToHeaderQuorum()
-	return rlpHash(&headerQuorum)
+
+	// If the mix digest is equivalent to the predefined Istanbul digest, use Istanbul
+	// specific hash calculation.
+	if h.MixDigest == IstanbulDigest {
+		// Seal is reserved in extra-data. To prove block is signed by the proposer.
+		if istanbulHeader := FilteredHeader(h); istanbulHeader != nil {
+			hash := rlpHash(istanbulHeader)
+			//fmt.Printf("Header Hash Istanbul: %s\n", hash.String())
+			//fmt.Printf("Header Instanbul: %+v\n", h)
+			return hash
+		}
+	}
+
+	hash := rlpHash(&headerQuorum)
+	//fmt.Printf("Header Hash 1: %s\n", hash.String())
+	//fmt.Printf("HeaderQourum: %+v\n", headerQuorum)
+	return hash
 }
 
 var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
