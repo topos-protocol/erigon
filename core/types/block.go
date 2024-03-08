@@ -131,6 +131,26 @@ type HeaderQourum struct {
 	Nonce       BlockNonce        `json:"nonce"`
 }
 
+func (h *HeaderQourum) ToHeader() *Header {
+	return &Header{
+		ParentHash:  h.ParentHash,
+		UncleHash:   h.UncleHash,
+		Coinbase:    libcommon.Address{},
+		Root:        h.Root,
+		TxHash:      h.TxHash,
+		ReceiptHash: h.ReceiptHash,
+		Bloom:       h.Bloom,
+		Difficulty:  h.Difficulty,
+		Number:      h.Number,
+		GasLimit:    h.GasLimit,
+		GasUsed:     h.GasUsed,
+		Time:        h.Time,
+		Extra:       h.Extra,
+		MixDigest:   h.MixDigest,
+		Nonce:       h.Nonce,
+	}
+}
+
 func (h *Header) ToHeaderQuorum() *HeaderQourum {
 	return &HeaderQourum{
 		ParentHash:  h.ParentHash,

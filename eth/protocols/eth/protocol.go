@@ -235,10 +235,17 @@ func (hn *HashOrNumber) DecodeRLP(s *rlp.Stream) error {
 // BlockHeadersPacket represents a block header response.
 type BlockHeadersPacket []*types.Header
 
+type BlockHeadersPacketQuorum []*types.HeaderQourum
+
 // BlockHeadersPacket represents a block header response over eth/66.
 type BlockHeadersPacket66 struct {
 	RequestId uint64
 	BlockHeadersPacket
+}
+
+type BlockHeadersPacketQuorum66 struct {
+	RequestId uint64
+	BlockHeadersPacketQuorum
 }
 
 // NewBlockPacket is the network packet for the block propagation message.
