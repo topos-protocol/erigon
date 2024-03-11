@@ -425,10 +425,11 @@ func (cs *MultiClient) blockHeaders(ctx context.Context, pkt eth.BlockHeadersPac
 		if number > highestBlock {
 			highestBlock = number
 		}
+		calculatedHash := header.Hash()
 		csHeaders = append(csHeaders, headerdownload.ChainSegmentHeader{
 			Header:    header,
 			HeaderRaw: hRaw,
-			Hash:      types.RawRlpHash(hRaw),
+			Hash:      calculatedHash,
 			Number:    number,
 		})
 		//blockNums = append(blockNums, int(number))
