@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 
-	"github.com/ledgerwatch/erigon-lib/common"
 	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 
 	"github.com/holiman/uint256"
@@ -38,7 +36,6 @@ import (
 	"github.com/ledgerwatch/erigon/turbo/rpchelper"
 	"github.com/ledgerwatch/erigon/turbo/transactions"
 	"github.com/ledgerwatch/erigon/turbo/trie"
-	"github.com/ledgerwatch/erigon/visual"
 )
 
 var latestNumOrHash = rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)
@@ -598,21 +595,10 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		return subTries, nil
 	}
 
+	var txTds *state.TrieDbState
+
 	for i, txn := range block.Transactions() {
 		statedb.SetTxContext(txn.Hash(), block.Hash(), i)
-
-		if !fullBlock && i == int(txIndex) && txIndex > 0 {
-			err = tds.ResolveStateTrieWithFunc(loadFunc)
-			if err != nil {
-				panic(err)
-			}
-			_, err = tds.UpdateStateTrie()
-
-			if err != nil {
-				panic(err)
-			}
-			tds.StartNewBuffer()
-		}
 
 		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, api.engine(), nil, gp, statedb, trieStateWriter, block.Header(), txn, usedGas, usedBlobGas, vmConfig)
 		if err != nil {
@@ -620,17 +606,18 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		}
 
 		if !fullBlock && i == int(txIndex) {
+			txTds = tds.WithLastBuffer()
 			break
 		}
 
-		if !chainConfig.IsByzantium(block.NumberU64()) {
+		if !chainConfig.IsByzantium(block.NumberU64()) || (!fullBlock && i+1 == int(txIndex)) {
 			tds.StartNewBuffer()
 		}
 
 		receipts = append(receipts, receipt)
 	}
 
-	if fullBlock || (int(txIndex) == len(block.Transactions())-1) {
+	if fullBlock {
 		if _, _, _, err = engine.FinalizeAndAssemble(chainConfig, block.Header(), statedb, block.Transactions(), block.Uncles(), receipts, block.Withdrawals(), nil, nil, nil, nil); err != nil {
 			fmt.Printf("Finalize of block %d failed: %v\n", blockNr, err)
 			return nil, err
@@ -661,46 +648,6 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 		return nil, err
 	}
 
-	if !fullBlock {
-		filename := fmt.Sprintf("state_%d.dot", blockNr)
-		f, err := os.Create(filename)
-		if err != nil {
-			return nil, err
-		}
-		indexColors := visual.HexIndexColors
-		fontColors := visual.HexFontColors
-		visual.StartGraph(f, false)
-
-		targetAccount := libcommon.HexToAddress("0xba386a4ca26b85fd057ab1ef86e3dc7bdeb5ce70")
-		accountHash, err := common.HashData(targetAccount[:])
-
-		if err != nil {
-			return nil, err
-		}
-
-		node, found := tds.Trie().GetAccountStorage(accountHash[:])
-
-		if !found {
-			return nil, fmt.Errorf("account %s not found", targetAccount.String())
-		}
-
-		trie.VisualNode(*node, f, &trie.VisualOpts{
-			Highlights:     nil,
-			IndexColors:    indexColors,
-			FontColors:     fontColors,
-			Values:         true,
-			CutTerminals:   0,
-			CodeCompressed: false,
-			ValCompressed:  false,
-			ValHex:         true,
-		})
-		visual.EndGraph(f)
-		if err := f.Close(); err != nil {
-			return nil, err
-		}
-		return buf.Bytes(), nil
-	}
-
 	nw, err := trie.NewWitnessFromReader(bytes.NewReader(buf.Bytes()), false)
 
 	if err != nil {
@@ -724,12 +671,45 @@ func (api *BaseAPI) getWitness(ctx context.Context, db kv.RoDB, blockNrOrHash rp
 	}
 
 	for i, txn := range block.Transactions() {
+		if !fullBlock && i == int(txIndex) {
+			s.Finalize()
+			break
+		}
+
 		ibs.SetTxContext(txn.Hash(), block.Hash(), i)
 		receipt, _, err := core.ApplyTransaction(chainConfig, getHashFn, engine, nil, gp, ibs, s, header, txn, usedGas, usedBlobGas, vmConfig)
 		if err != nil {
 			return nil, fmt.Errorf("tx %x failed: %v", txn.Hash(), err)
 		}
 		receipts = append(receipts, receipt)
+	}
+
+	if !fullBlock {
+		err = txTds.ResolveStateTrieWithFunc(
+			func(loader *trie.SubTrieLoader, rl *trie.RetainList, dbPrefixes [][]byte, fixedbits []int, accountNibbles [][]byte) (trie.SubTries, error) {
+				return trie.SubTries{}, nil
+			},
+		)
+
+		if err != nil {
+			return nil, err
+		}
+
+		rl = txTds.GetRetainList()
+
+		w, err = s.GetTrie().ExtractWitness(false, rl)
+
+		if err != nil {
+			return nil, err
+		}
+
+		var buf bytes.Buffer
+		_, err = w.WriteInto(&buf)
+		if err != nil {
+			return nil, err
+		}
+
+		return buf.Bytes(), nil
 	}
 
 	receiptSha := types.DeriveSha(receipts)
