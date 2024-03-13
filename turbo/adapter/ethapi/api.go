@@ -19,9 +19,10 @@ package ethapi
 import (
 	"errors"
 	"fmt"
-	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 	"io"
 	"math/big"
+
+	"github.com/ledgerwatch/erigon-lib/common/hexutil"
 
 	"github.com/holiman/uint256"
 	libcommon "github.com/ledgerwatch/erigon-lib/common"
@@ -268,20 +269,20 @@ func FormatLogs(logs []logger.StructLog) []StructLogRes {
 
 // RPCMarshalHeader converts the given header to the RPC output .
 func RPCMarshalHeader(head *types.Header) map[string]interface{} {
-	var signer libcommon.Address
-	if len(head.Extra) < crypto.SignatureLength {
-		signer = head.Coinbase
-	} else {
-		signature := head.Extra[len(head.Extra)-crypto.SignatureLength:]
+	// var signer libcommon.Address
+	// if len(head.Extra) < crypto.SignatureLength {
+	// 	signer = head.Coinbase
+	// } else {
+	// 	signature := head.Extra[len(head.Extra)-crypto.SignatureLength:]
 
-		// Recover the public key and the Ethereum address
-		pubkey, err := crypto.Ecrecover(SealHash(head).Bytes(), signature)
-		if err != nil {
-			signer = libcommon.Address{}
-		} else {
-			copy(signer[:], crypto.Keccak256(pubkey[1:])[12:])
-		}
-	}
+	// 	// Recover the public key and the Ethereum address
+	// 	pubkey, err := crypto.Ecrecover(SealHash(head).Bytes(), signature)
+	// 	if err != nil {
+	// 		signer = libcommon.Address{}
+	// 	} else {
+	// 		copy(signer[:], crypto.Keccak256(pubkey[1:])[12:])
+	// 	}
+	// }
 
 	result := map[string]interface{}{
 		"number":           (*hexutil.Big)(head.Number),
@@ -292,7 +293,7 @@ func RPCMarshalHeader(head *types.Header) map[string]interface{} {
 		"sha3Uncles":       head.UncleHash,
 		"logsBloom":        head.Bloom,
 		"stateRoot":        head.Root,
-		"miner":            signer,
+		"miner":            head.Coinbase,
 		"difficulty":       (*hexutil.Big)(head.Difficulty),
 		"extraData":        hexutility.Bytes(head.Extra),
 		"size":             hexutil.Uint64(head.Size()),
