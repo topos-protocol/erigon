@@ -25,7 +25,6 @@ import (
 	"github.com/ledgerwatch/erigon/polygon/heimdall"
 
 	"github.com/ledgerwatch/erigon/consensus"
-	"github.com/ledgerwatch/erigon/consensus/misc"
 	"github.com/ledgerwatch/erigon/core/rawdb"
 	"github.com/ledgerwatch/erigon/core/rawdb/blockio"
 	"github.com/ledgerwatch/erigon/core/types"
@@ -316,19 +315,21 @@ func (h *Hook) afterRun(tx kv.Tx, finishProgressBefore uint64) error {
 	}
 	if notifications != nil && notifications.Accumulator != nil && currentHeader != nil {
 
-		pendingBaseFee := misc.CalcBaseFee(h.chainConfig, currentHeader)
+		//pendingBaseFee := misc.CalcBaseFee(h.chainConfig, currentHeader)
+		var pendingBaseFee uint64 = 0
 		if currentHeader.Number.Uint64() == 0 {
 			notifications.Accumulator.StartChange(0, currentHeader.Hash(), nil, false)
 		}
-		pendingBlobFee := h.chainConfig.GetMinBlobGasPrice()
-		if currentHeader.ExcessBlobGas != nil {
-			excessBlobGas := misc.CalcExcessBlobGas(h.chainConfig, currentHeader)
-			f, err := misc.GetBlobGasPrice(h.chainConfig, excessBlobGas)
-			if err != nil {
-				return err
-			}
-			pendingBlobFee = f.Uint64()
-		}
+		// pendingBlobFee := h.chainConfig.GetMinBlobGasPrice()
+		// if currentHeader.ExcessBlobGas != nil {
+		// 	excessBlobGas := misc.CalcExcessBlobGas(h.chainConfig, currentHeader)
+		// 	f, err := misc.GetBlobGasPrice(h.chainConfig, excessBlobGas)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// 	pendingBlobFee = f.Uint64()
+		// }
+		var pendingBlobFee uint64 = 0
 
 		h.logger.Debug("[hook] Sending state changes", "currentBlock", currentHeader.Number.Uint64(), "finalizedBlock", finalizedBlock)
 		notifications.Accumulator.SendAndReset(h.ctx, notifications.StateChangesConsumer, pendingBaseFee.Uint64(), pendingBlobFee, currentHeader.GasLimit, finalizedBlock)
